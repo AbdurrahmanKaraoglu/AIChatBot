@@ -28,45 +28,39 @@ namespace AIChatBot.Services
             {
                 _logger.LogInformation($"Yeni mesaj: {request.SessionId}");
 
-                // 1. System Prompt
                 var systemPrompt = BuildSystemPrompt(userContext);
-
-                // 2.  RAG (Belge Arama)
                 var relevantDocs = _rag.SearchDocuments(request.Message);
                 var ragContext = _rag.FormatDocumentsAsContext(relevantDocs);
 
-                // 3. Geçmişi al
                 var messages = _memory.GetHistory(request.SessionId);
 
-                // 4. System prompt ekle (yoksa)
                 if (!messages.Any(m => m.Role == ChatRole.System))
                 {
                     var fullPrompt = systemPrompt + (string.IsNullOrEmpty(ragContext) ? "" : "\n\n" + ragContext);
                     messages.Insert(0, new ChatMessage(ChatRole.System, fullPrompt));
                 }
 
-                // 5. Yeni mesajı ekle
                 var userMessage = new ChatMessage(ChatRole.User, request.Message);
                 messages.Add(userMessage);
                 _memory.AddMessage(request.SessionId, userMessage);
 
-                // 6. LLM'e gönder
                 _logger.LogInformation("LLM'e istek atılıyor...");
 
-                // ✅ GetResponseAsync kullanımı (IChatClient'in metodu)
-                Microsoft.Extensions.AI.ChatResponse llmResponse = await _chatClient.GetResponseAsync(messages);
+                // ✅ Streaming kullanarak metni topla (daha güvenli)
+                var responseText = "";
+                await foreach (var update in _chatClient.GetStreamingResponseAsync(messages))
+                {
+                    responseText += update.Text;
+                }
 
-                // ✅ llmResponse.Message property'si var
-                var assistantMessage = llmResponse.Message;
-
-                // 7. Cevabı kaydet
+                // ✅ ChatMessage oluştur
+                var assistantMessage = new ChatMessage(ChatRole.Assistant, responseText);
                 _memory.AddMessage(request.SessionId, assistantMessage);
 
-                // 8.  Kendi formatınıza çevirip döndürün
                 return new AIChatBot.Models.ChatResponse
                 {
                     SessionId = request.SessionId,
-                    Answer = assistantMessage.Text ?? "Cevap üretilemedi.",
+                    Answer = responseText,
                     Success = true
                 };
             }
@@ -84,7 +78,7 @@ namespace AIChatBot.Services
 
         private string BuildSystemPrompt(UserContext userContext)
         {
-            return $@"Sen yardımcı bir asistansın. 
+            return $@"Sen yardımcı bir asistansın.
 Kullanıcı: {userContext.UserName} ({userContext.Role})
 Dili: Türkçe kullan.
 Cevapları kısa ve net ver.";
