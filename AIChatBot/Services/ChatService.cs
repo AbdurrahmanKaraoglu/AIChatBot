@@ -28,32 +28,41 @@ namespace AIChatBot.Services
             {
                 _logger.LogInformation($"Yeni mesaj: {request.SessionId}");
 
-                var systemPrompt = BuildSystemPrompt(userContext);
+                // 1. RAG - Belge arama
                 var relevantDocs = _rag.SearchDocuments(request.Message);
                 var ragContext = _rag.FormatDocumentsAsContext(relevantDocs);
 
-                var messages = _memory.GetHistory(request.SessionId);
+                _logger.LogInformation($"RAG Sonucu: {relevantDocs.Count} belge bulundu");
 
-                if (!messages.Any(m => m.Role == ChatRole.System))
-                {
-                    var fullPrompt = systemPrompt + (string.IsNullOrEmpty(ragContext) ? "" : "\n\n" + ragContext);
-                    messages.Insert(0, new ChatMessage(ChatRole.System, fullPrompt));
-                }
+                // 2. System prompt
+                var systemPrompt = BuildSystemPrompt(userContext, ragContext);
 
+                // 3. Geçmişi al (System mesaj hariç - her seferinde yeniden oluşturacağız)
+                var messages = _memory.GetHistory(request.SessionId)
+                    .Where(m => m.Role != ChatRole.System)
+                    .ToList();
+
+                // 4. System prompt'u ekle (en başa)
+                messages.Insert(0, new ChatMessage(ChatRole.System, systemPrompt));
+
+                // 5.  Kullanıcı mesajını ekle
                 var userMessage = new ChatMessage(ChatRole.User, request.Message);
                 messages.Add(userMessage);
-                _memory.AddMessage(request.SessionId, userMessage);
 
-                _logger.LogInformation("LLM'e istek atılıyor...");
+                _logger.LogInformation("LLM'e istek atılıyor.. .");
 
-                // ✅ Streaming kullanarak metni topla (daha güvenli)
+                // 6. LLM'den cevap al
                 var responseText = "";
                 await foreach (var update in _chatClient.GetStreamingResponseAsync(messages))
                 {
                     responseText += update.Text;
                 }
 
-                // ✅ ChatMessage oluştur
+                _logger.LogInformation($"LLM Cevabı: {responseText}");
+
+                // 7. ✅ Sadece user ve assistant mesajlarını kaydet (duplicate önleme)
+                _memory.AddMessage(request.SessionId, userMessage);
+
                 var assistantMessage = new ChatMessage(ChatRole.Assistant, responseText);
                 _memory.AddMessage(request.SessionId, assistantMessage);
 
@@ -76,12 +85,21 @@ namespace AIChatBot.Services
             }
         }
 
-        private string BuildSystemPrompt(UserContext userContext)
+        private string BuildSystemPrompt(UserContext userContext, string ragContext)
         {
-            return $@"Sen yardımcı bir asistansın.
-Kullanıcı: {userContext.UserName} ({userContext.Role})
-Dili: Türkçe kullan.
-Cevapları kısa ve net ver.";
+            // ✅ Çok daha temiz ve doğal prompt
+            var prompt = "Sen profesyonel bir müşteri destek temsilcisisin. ";
+
+            // ✅ RAG context varsa doğrudan bilgi olarak sun
+            if (!string.IsNullOrEmpty(ragContext))
+            {
+                prompt += $"\n\n{ragContext}\n\n";
+                prompt += "Yukarıdaki bilgileri kullanarak müşteriye kısa ve net cevaplar ver.  ";
+            }
+
+            prompt += "Sadece Türkçe konuş. Nazik ve yardımsever ol. ";
+
+            return prompt;
         }
 
         public List<ChatMessage> GetSessionHistory(string sessionId) => _memory.GetHistory(sessionId);
