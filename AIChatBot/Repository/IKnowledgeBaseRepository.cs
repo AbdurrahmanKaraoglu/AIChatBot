@@ -6,5 +6,13 @@ namespace AIChatBot.Repository.KnowledgeBase
     {
         Task<List<Document>> SearchDocuments(string query);
         Task<List<Document>> GetAllDocuments();
+
+        // ✅ YENİ: Akıllı ürün arama
+        Task<List<Document>> SmartProductSearch(
+            string query,
+            decimal? minPrice = null,
+            decimal? maxPrice = null,
+            string? category = null
+        );
     }
 }

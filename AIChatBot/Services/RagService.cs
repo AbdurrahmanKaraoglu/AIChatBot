@@ -14,6 +14,46 @@ namespace AIChatBot.Services
             _logger = logger;
         }
 
+        // ✅ YENİ: AI için akıllı arama
+        public async Task<List<Document>> SmartSearchForAI(string userQuery)
+        {
+            // Fiyat aralığı çıkar (örn: "500-1000 TL arası")
+            decimal? minPrice = null;
+            decimal? maxPrice = null;
+
+            var priceMatch = System.Text.RegularExpressions.Regex.Match(
+                userQuery,
+                @"(\d+)\s*-\s*(\d+)\s*TL"
+            );
+
+            if (priceMatch.Success)
+            {
+                minPrice = decimal.Parse(priceMatch.Groups[1].Value);
+                maxPrice = decimal.Parse(priceMatch.Groups[2].Value);
+                _logger.LogInformation($"[AI-SMART-SEARCH] Fiyat aralığı tespit edildi: {minPrice}-{maxPrice} TL");
+            }
+
+            // Kategori çıkar
+            string? category = null;
+            if (userQuery.ToLower().Contains("bilgisayar")) category = "Bilgisayar";
+            else if (userQuery.ToLower().Contains("elektronik")) category = "Elektronik";
+            else if (userQuery.ToLower().Contains("aksesuar")) category = "Aksesuar";
+
+            // Akıllı arama yap
+            if (minPrice.HasValue || maxPrice.HasValue || category != null)
+            {
+                return await _knowledgeBaseRepository.SmartProductSearch(
+                    userQuery,
+                    minPrice,
+                    maxPrice,
+                    category
+                );
+            }
+
+            // Normal arama
+            return await SearchDocumentsAsync(userQuery);
+        }
+
         public async Task<List<Document>> SearchDocumentsAsync(string query)
         {
             // ✅ Türkçe stopwords'leri çıkar ve keyword'leri ayır

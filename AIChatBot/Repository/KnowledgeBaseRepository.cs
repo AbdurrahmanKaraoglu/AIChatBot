@@ -16,6 +16,75 @@ namespace AIChatBot.Repository.KnowledgeBase
             _logger = logger;
         }
 
+        // ✅ YENİ METOD
+        public async Task<List<Document>> SmartProductSearch(
+            string query,
+            decimal? minPrice = null,
+            decimal? maxPrice = null,
+            string? category = null)
+        {
+            List<Document> documents = new List<Document>();
+
+            try
+            {
+                _logger.LogInformation($"[SMART-SEARCH] Query: '{query}', MinPrice: {minPrice}, MaxPrice: {maxPrice}, Category: {category}");
+
+                using (SqlConnection conn = new SqlConnection(_connectionString))
+                {
+                    using (SqlCommand cmd = new SqlCommand("sp_SmartProductSearch", conn))
+                    {
+                        cmd.CommandType = CommandType.StoredProcedure;
+
+                        cmd.Parameters.Add(new SqlParameter("@SearchQuery", SqlDbType.NVarChar, 200)
+                        {
+                            Value = query ?? ""
+                        });
+
+                        cmd.Parameters.Add(new SqlParameter("@MinPrice", SqlDbType.Decimal)
+                        {
+                            Value = (object)minPrice ?? DBNull.Value
+                        });
+
+                        cmd.Parameters.Add(new SqlParameter("@MaxPrice", SqlDbType.Decimal)
+                        {
+                            Value = (object)maxPrice ?? DBNull.Value
+                        });
+
+                        cmd.Parameters.Add(new SqlParameter("@Category", SqlDbType.NVarChar, 100)
+                        {
+                            Value = (object)category ?? DBNull.Value
+                        });
+
+                        await conn.OpenAsync();
+
+                        using (SqlDataReader reader = await cmd.ExecuteReaderAsync())
+                        {
+                            while (await reader.ReadAsync())
+                            {
+                                documents.Add(new Document
+                                {
+                                    Id = 0, // SP Title döndüğü için ID yok
+                                    Title = reader.GetString(reader.GetOrdinal("Title")),
+                                    Content = reader.GetString(reader.GetOrdinal("Content")),
+                                    Category = reader.IsDBNull(reader.GetOrdinal("Category"))
+                                        ? ""
+                                        : reader.GetString(reader.GetOrdinal("Category"))
+                                });
+                            }
+                        }
+                    }
+                }
+
+                _logger.LogInformation($"[SMART-SEARCH] {documents.Count} ürün bulundu");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"[SMART-SEARCH] Hata: {ex.Message}");
+            }
+
+            return documents;
+        }
+
         public async Task<List<Document>> SearchDocuments(string query)
         {
             List<Document> documents = new List<Document>();
