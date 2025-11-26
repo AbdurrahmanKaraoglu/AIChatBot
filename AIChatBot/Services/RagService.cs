@@ -6,60 +6,87 @@ namespace AIChatBot.Services
     public class RagService
     {
         private readonly IKnowledgeBaseRepository _knowledgeBaseRepository;
+        private readonly EmbeddingService? _embeddingService;  // ✅ Nullable (henüz eklenmemiş olabilir)
         private readonly ILogger<RagService> _logger;
 
-        public RagService(IKnowledgeBaseRepository knowledgeBaseRepository, ILogger<RagService> logger)
+        public RagService(
+            IKnowledgeBaseRepository knowledgeBaseRepository,
+            ILogger<RagService> logger,
+            EmbeddingService? embeddingService = null)  // ✅ Opsiyonel
         {
             _knowledgeBaseRepository = knowledgeBaseRepository;
             _logger = logger;
+            _embeddingService = embeddingService;
         }
 
-        // ✅ YENİ: AI için akıllı arama
-        public async Task<List<Document>> SmartSearchForAI(string userQuery)
+        /// <summary>
+        /// Semantic search (Vector-based) - Öncelikli arama yöntemi
+        /// </summary>
+        public async Task<List<Document>> SemanticSearchAsync(string query, int topK = 5)
         {
-            // Fiyat aralığı çıkar (örn: "500-1000 TL arası")
-            decimal? minPrice = null;
-            decimal? maxPrice = null;
-
-            var priceMatch = System.Text.RegularExpressions.Regex.Match(
-                userQuery,
-                @"(\d+)\s*-\s*(\d+)\s*TL"
-            );
-
-            if (priceMatch.Success)
+            // Embedding servisi yoksa keyword search'e düş
+            if (_embeddingService == null)
             {
-                minPrice = decimal.Parse(priceMatch.Groups[1].Value);
-                maxPrice = decimal.Parse(priceMatch.Groups[2].Value);
-                _logger.LogInformation($"[AI-SMART-SEARCH] Fiyat aralığı tespit edildi: {minPrice}-{maxPrice} TL");
+                _logger.LogWarning("[RAG] EmbeddingService bulunamadı, keyword search kullanılıyor");
+                return await SearchDocumentsAsync(query);
             }
 
-            // Kategori çıkar
-            string? category = null;
-            if (userQuery.ToLower().Contains("bilgisayar")) category = "Bilgisayar";
-            else if (userQuery.ToLower().Contains("elektronik")) category = "Elektronik";
-            else if (userQuery.ToLower().Contains("aksesuar")) category = "Aksesuar";
-
-            // Akıllı arama yap
-            if (minPrice.HasValue || maxPrice.HasValue || category != null)
+            try
             {
-                return await _knowledgeBaseRepository.SmartProductSearch(
-                    userQuery,
-                    minPrice,
-                    maxPrice,
-                    category
+                _logger.LogInformation("[SEMANTIC-SEARCH] Query: '{Query}', TopK: {TopK}", query, topK);
+
+                // 1. Query'yi vektöre çevir
+                var queryVector = await _embeddingService.GetEmbeddingAsync(query);
+
+                _logger.LogDebug("[SEMANTIC-SEARCH] Embedding oluşturuldu: {Dimension} boyut", queryVector.Length);
+
+                // 2. Vector search yap
+                var results = await _knowledgeBaseRepository.VectorSearchAsync(queryVector, topK);
+
+                _logger.LogInformation(
+                    "[SEMANTIC-SEARCH] {Count} belge bulundu",
+                    results.Count
                 );
-            }
 
-            // Normal arama
-            return await SearchDocumentsAsync(userQuery);
+                // Similarity score'ları logla
+                foreach (var (doc, similarity) in results)
+                {
+                    _logger.LogDebug(
+                        "[SEMANTIC-SEARCH] • {Title} (Similarity: {Similarity:P2})",
+                        doc.Title,
+                        similarity
+                    );
+                }
+
+                return results.Select(r => r.Doc).ToList();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(
+                    ex,
+                    "[SEMANTIC-SEARCH-ERROR] Query: '{Query}', Fallback to keyword search",
+                    query
+                );
+
+                // Hata durumunda keyword search'e düş
+                return await SearchDocumentsAsync(query);
+            }
         }
 
+        /// <summary>
+        /// Keyword-based search (Fallback yöntemi)
+        /// </summary>
         public async Task<List<Document>> SearchDocumentsAsync(string query)
         {
-            // ✅ Türkçe stopwords'leri çıkar ve keyword'leri ayır
+            _logger.LogInformation("[KEYWORD-SEARCH] Query: '{Query}'", query);
+
+            // Türkçe stopwords'leri çıkar ve keyword'leri ayır
             var keywords = ExtractKeywords(query);
 
-            _logger.LogInformation($"[RAG] Query: '{query}' → Keywords: {string.Join(", ", keywords)}");
+            _logger.LogDebug(
+                "[KEYWORD-SEARCH] Keywords: {Keywords}",
+                string.Join(", ", keywords)
+            );
 
             var allDocuments = new List<Document>();
 
@@ -68,6 +95,12 @@ namespace AIChatBot.Services
             {
                 var docs = await _knowledgeBaseRepository.SearchDocuments(keyword);
                 allDocuments.AddRange(docs);
+
+                _logger.LogDebug(
+                    "[KEYWORD-SEARCH] Keyword '{Keyword}': {Count} belge bulundu",
+                    keyword,
+                    docs.Count
+                );
             }
 
             // Duplicate'leri temizle
@@ -76,11 +109,101 @@ namespace AIChatBot.Services
                 .Select(g => g.First())
                 .ToList();
 
-            _logger.LogInformation($"[RAG] Toplam {uniqueDocs.Count} benzersiz belge bulundu");
+            _logger.LogInformation(
+                "[KEYWORD-SEARCH] Toplam {Count} benzersiz belge bulundu",
+                uniqueDocs.Count
+            );
 
             return uniqueDocs;
         }
 
+        /// <summary>
+        /// Akıllı arama (Fiyat + Kategori filtreli)
+        /// </summary>
+        public async Task<List<Document>> SmartSearchForAI(string userQuery)
+        {
+            _logger.LogInformation("[SMART-SEARCH] Query: '{Query}'", userQuery);
+
+            // Fiyat aralığı çıkar (örn: "500-1000 TL arası")
+            var (minPrice, maxPrice) = ExtractPriceRange(userQuery);
+
+            // Kategori çıkar
+            var category = ExtractCategory(userQuery);
+
+            // Akıllı arama yap
+            if (minPrice.HasValue || maxPrice.HasValue || category != null)
+            {
+                _logger.LogInformation(
+                    "[SMART-SEARCH] Filtreler: MinPrice={MinPrice}, MaxPrice={MaxPrice}, Category={Category}",
+                    minPrice,
+                    maxPrice,
+                    category
+                );
+
+                var results = await _knowledgeBaseRepository.SmartProductSearch(
+                    userQuery,
+                    minPrice,
+                    maxPrice,
+                    category
+                );
+
+                _logger.LogInformation("[SMART-SEARCH] {Count} ürün bulundu", results.Count);
+
+                return results;
+            }
+
+            // Filtre yoksa semantic search dene
+            _logger.LogDebug("[SMART-SEARCH] Filtre yok, semantic search deneniyor");
+            return await SemanticSearchAsync(userQuery, topK: 5);
+        }
+
+        /// <summary>
+        /// Belgeleri context formatına çevirir (LLM için)
+        /// </summary>
+        public string FormatDocumentsAsContext(List<Document> documents)
+        {
+            if (documents == null || !documents.Any())
+            {
+                _logger.LogWarning("[FORMAT] Belge listesi boş");
+                return "";
+            }
+
+            _logger.LogDebug("[FORMAT] {Count} belge formatlanıyor", documents.Count);
+
+            var context = "📚 BİLGİ BANKASI:\n\n";
+
+            foreach (var doc in documents)
+            {
+                // İçeriği kısalt (çok uzunsa)
+                var content = doc.Content.Length > 500
+                    ? doc.Content.Substring(0, 500) + "..."
+                    : doc.Content;
+
+                context += $"• **{doc.Title}**\n  {content}\n\n";
+            }
+
+            context += "⚠️ SADECE yukarıdaki bilgileri kullan!\n";
+
+            return context;
+        }
+
+        /// <summary>
+        /// Tüm aktif belgeleri getirir
+        /// </summary>
+        public async Task<List<Document>> GetAllDocumentsAsync()
+        {
+            _logger.LogInformation("[GET-ALL] Tüm belgeler istendi");
+
+            var documents = await _knowledgeBaseRepository.GetAllDocuments();
+
+            _logger.LogInformation("[GET-ALL] {Count} belge bulundu", documents.Count);
+
+            return documents;
+        }
+
+        /// <summary>
+        /// Keyword extraction (Türkçe NLP)
+        /// </summary>
         private List<string> ExtractKeywords(string query)
         {
             // Türkçe stopwords (gereksiz kelimeler)
@@ -88,10 +211,10 @@ namespace AIChatBot.Services
             {
                 "bir", "ve", "veya", "ile", "için", "ne", "nedir", "nasıl",
                 "mi", "mu", "mı", "mü", "da", "de", "ta", "te",
-                "kaç", "hangi", "şu", "bu", "o"
+                "kaç", "hangi", "şu", "bu", "o", "olan", "olarak",
+                "ise", "eğer", "ancak", "ama", "fakat", "ya", "yani"
             };
 
-            // ✅ String array kullan (char array yerine)
             var separators = new[] { " ", "? ", "!", ".", ",", ";", ":" };
 
             var words = query
@@ -101,21 +224,90 @@ namespace AIChatBot.Services
                 .Distinct()
                 .ToList();
 
+            _logger.LogDebug(
+                "[KEYWORD-EXTRACTION] '{Query}' → {Count} keyword",
+                query,
+                words.Count
+            );
+
             // En az bir keyword yoksa orijinal query'yi kullan
             return words.Any() ? words : new List<string> { query };
         }
 
-        public string FormatDocumentsAsContext(List<Document> documents)
+        /// <summary>
+        /// Fiyat aralığı çıkarır (Regex ile)
+        /// </summary>
+        private (decimal? minPrice, decimal? maxPrice) ExtractPriceRange(string query)
         {
-            if (!documents.Any()) return "";
+            // Pattern: "500-1000 TL", "500 ile 1000 TL arası"
+            var patterns = new[]
+            {
+                @"(\d+)\s*-\s*(\d+)\s*TL",                    // 500-1000 TL
+                @"(\d+)\s+ile\s+(\d+)\s*TL",                  // 500 ile 1000 TL
+                @"(\d+)\s*TL\s*ile\s*(\d+)\s*TL",            // 500 TL ile 1000 TL
+                @"(\d+)\s*TL.*?(\d+)\s*TL\s+arası"           // 500 TL 1000 TL arası
+            };
 
-            return "BİLGİ BANKASI:\n" +
-                   string.Join("\n", documents.Select(d => $"• {d.Title}: {d.Content}"));
+            foreach (var pattern in patterns)
+            {
+                var match = System.Text.RegularExpressions.Regex.Match(query, pattern);
+                if (match.Success)
+                {
+                    var min = decimal.Parse(match.Groups[1].Value);
+                    var max = decimal.Parse(match.Groups[2].Value);
+
+                    _logger.LogDebug(
+                        "[PRICE-EXTRACTION] Fiyat aralığı: {Min}-{Max} TL",
+                        min,
+                        max
+                    );
+
+                    return (min, max);
+                }
+            }
+
+            // Tek fiyat (maksimum olarak kullan)
+            var singlePriceMatch = System.Text.RegularExpressions.Regex.Match(
+                query,
+                @"(\d+)\s*TL\s+(altı|altında|kadar)"
+            );
+
+            if (singlePriceMatch.Success)
+            {
+                var price = decimal.Parse(singlePriceMatch.Groups[1].Value);
+                _logger.LogDebug("[PRICE-EXTRACTION] Max fiyat: {Price} TL", price);
+                return (null, price);
+            }
+
+            return (null, null);
         }
 
-        public async Task<List<Document>> GetAllDocumentsAsync()
+        /// <summary>
+        /// Kategori çıkarır (Pattern matching)
+        /// </summary>
+        private string? ExtractCategory(string query)
         {
-            return await _knowledgeBaseRepository.GetAllDocuments();
+            var queryLower = query.ToLowerInvariant();
+
+            var categoryMappings = new Dictionary<string, string[]>
+            {
+                { "Bilgisayar", new[] { "bilgisayar", "laptop", "pc", "masaüstü", "notebook" } },
+                { "Elektronik", new[] { "elektronik", "telefon", "tablet", "akıllı saat" } },
+                { "Aksesuar", new[] { "aksesuar", "kulaklık", "kablo", "şarj", "kılıf" } },
+                { "Ev", new[] { "ev", "mobilya", "dekorasyon" } },
+                { "Giyim", new[] { "giyim", "kıyafet", "ayakkabı", "çanta" } }
+            };
+
+            foreach (var (category, keywords) in categoryMappings)
+            {
+                if (keywords.Any(k => queryLower.Contains(k)))
+                {
+                    _logger.LogDebug("[CATEGORY-EXTRACTION] Kategori: {Category}", category);
+                    return category;
+                }
+            }
+
+            return null;
         }
     }
 }

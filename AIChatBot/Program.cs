@@ -1,7 +1,8 @@
 ﻿using AIChatBot.Models;
-using AIChatBot.Services;
-using AIChatBot.Repository.KnowledgeBase;
 using AIChatBot.Repository.ChatMemory;
+using AIChatBot.Repository.KnowledgeBase;
+using AIChatBot.Services;
+using AIChatBot.Tools;
 using Microsoft.Extensions.AI;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -11,6 +12,41 @@ var ollamaSettings = builder.Configuration.GetSection("Ollama").Get<OllamaSettin
                      ?? new OllamaSettings();
 
 builder.Services.AddSingleton(ollamaSettings);
+
+// Tool sınıflarını kaydet
+builder.Services.AddScoped<GetProductInfoTool>();
+builder.Services.AddScoped<CalculateShippingTool>();
+builder.Services.AddScoped<SearchRAGTool>();
+
+// AIFunctionFactory ile tool registration
+builder.Services.AddSingleton(sp =>
+{
+    var productTool = sp.GetRequiredService<GetProductInfoTool>();
+    return AIFunctionFactory.Create(productTool.Execute, "GetProductInfo");
+});
+
+builder.Services.AddSingleton(sp =>
+{
+    var shippingTool = sp.GetRequiredService<CalculateShippingTool>();
+    return AIFunctionFactory.Create(shippingTool.Execute, "CalculateShipping");
+});
+
+builder.Services.AddSingleton(sp =>
+{
+    var ragTool = sp.GetRequiredService<SearchRAGTool>();
+    return AIFunctionFactory.Create(ragTool.Execute, "SearchRAG");
+});
+
+// Tüm tool'ları topla
+builder.Services.AddSingleton<IEnumerable<AIFunction>>(sp =>
+{
+    return new[]
+    {
+        sp.GetServices<AIFunction>().First(f => f. Metadata.Name == "GetProductInfo"),
+        sp.GetServices<AIFunction>().First(f => f.Metadata.Name == "CalculateShipping"),
+        sp.GetServices<AIFunction>().First(f => f. Metadata.Name == "SearchRAG")
+    };
+});
 
 // 2. Loglama
 builder.Services.AddLogging(l => l.AddConsole());

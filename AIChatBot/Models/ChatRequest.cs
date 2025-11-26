@@ -27,5 +27,9 @@ namespace AIChatBot.Models
         /// </summary>
         [JsonPropertyName("message")]
         public string Message { get; set; } = string.Empty;
+
+        // ✅ RBAC için yeni alanlar
+        public string Role { get; set; } = "Customer";  // "Admin", "Customer", "Moderator"
+        public List<int> AllowedProductIds { get; set; } = new();  // İzin verilen ürünler
     }
 }
