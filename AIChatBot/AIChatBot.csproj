@@ -9,14 +9,12 @@
   <ItemGroup>
     <!-- Microsoft.Extensions.AI - LLM entegrasyonu -->
     <PackageReference Include="Microsoft.Extensions.AI" Version="10.0.1" />
+    <PackageReference Include="Microsoft.OpenApi" Version="1.6.22" />
 
     <!-- Microsoft.Extensions.AI.Ollama - Ollama desteği -->
 
     <!-- Swagger/OpenAPI - API dokümantasyonu -->
-    <PackageReference Include="Swashbuckle.AspNetCore" Version="10.0.1" />
-
-    <!-- ASP.NET Core OpenAPI -->
-    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.0" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="7.2.0" />
   </ItemGroup>
 
 </Project>

@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.AI;
+﻿using AIChatBot.Models;
+using Microsoft.Extensions.AI;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -9,18 +10,33 @@ namespace AIChatBot.Services
     {
         private readonly HttpClient _httpClient;
         private readonly string _modelId;
+        private readonly OllamaSettings _settings;
 
         public ChatClientMetadata Metadata { get; }
 
+        // Constructor 1: 2 parametre
         public OllamaChatClient(string endpoint, string modelId)
+            : this(endpoint, modelId, new OllamaSettings())
+        {
+        }
+
+        // Constructor 2: 3 parametre
+        public OllamaChatClient(string endpoint, string modelId, OllamaSettings settings)
         {
             _modelId = modelId;
-            _httpClient = new HttpClient { BaseAddress = new Uri(endpoint), Timeout = TimeSpan.FromMinutes(5) };
+            _settings = settings ?? new OllamaSettings();
+
+            _httpClient = new HttpClient
+            {
+                BaseAddress = new Uri(endpoint),
+                Timeout = TimeSpan.FromSeconds(_settings.Timeout)
+            };
+
             Metadata = new ChatClientMetadata("Ollama", new Uri(endpoint), modelId);
         }
 
-        // ✅ IChatClient interface'inden gelen doğru metod
-        public async Task<ChatResponse> GetResponseAsync(
+        // ✅ Return type: Microsoft.Extensions.AI.ChatResponse (TAM NAMESPACE)
+        public async Task<Microsoft.Extensions.AI.ChatResponse> GetResponseAsync(
             IEnumerable<ChatMessage> chatMessages,
             ChatOptions? options = null,
             CancellationToken cancellationToken = default)
@@ -34,11 +50,10 @@ namespace AIChatBot.Services
 
             var assistantMessage = new ChatMessage(ChatRole.Assistant, ollamaResponse?.Message?.Content ?? "");
 
-            // ✅ ChatResponse constructor: ChatResponse(ChatMessage message)
-            return new ChatResponse(assistantMessage);
+            // ✅ Microsoft.Extensions.AI.ChatResponse döndür
+            return new Microsoft.Extensions.AI.ChatResponse(assistantMessage);
         }
 
-        // ✅ IChatClient interface'inden gelen doğru streaming metod
         public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
             IEnumerable<ChatMessage> chatMessages,
             ChatOptions? options = null,
@@ -66,7 +81,6 @@ namespace AIChatBot.Services
 
                 if (chunk?.Message?.Content != null)
                 {
-                    // ✅ ChatResponseUpdate constructor: ChatResponseUpdate(ChatRole role, string text)
                     yield return new ChatResponseUpdate(ChatRole.Assistant, chunk.Message.Content);
                 }
             }
@@ -87,7 +101,13 @@ namespace AIChatBot.Services
                 {
                     Role = m.Role.Value?.ToLower() ?? "user",
                     Content = m.Text ?? ""
-                }).ToList()
+                }).ToList(),
+                Options = new OllamaOptions
+                {
+                    Temperature = _settings.Temperature,
+                    TopP = _settings.TopP,
+                    RepeatPenalty = _settings.RepeatPenalty
+                }
             };
         }
 
@@ -97,6 +117,14 @@ namespace AIChatBot.Services
             [JsonPropertyName("model")] public string Model { get; set; } = "";
             [JsonPropertyName("messages")] public List<OllamaMessage> Messages { get; set; } = new();
             [JsonPropertyName("stream")] public bool Stream { get; set; }
+            [JsonPropertyName("options")] public OllamaOptions? Options { get; set; }
+        }
+
+        private class OllamaOptions
+        {
+            [JsonPropertyName("temperature")] public double Temperature { get; set; }
+            [JsonPropertyName("top_p")] public double TopP { get; set; }
+            [JsonPropertyName("repeat_penalty")] public double RepeatPenalty { get; set; }
         }
 
         private class OllamaMessage
