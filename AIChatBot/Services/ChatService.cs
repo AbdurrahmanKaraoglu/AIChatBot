@@ -1,4 +1,5 @@
 ﻿using AIChatBot.Models;
+using AIChatBot.Repository.ChatMemory;
 using Microsoft.Extensions.AI;
 
 namespace AIChatBot.Services
@@ -6,18 +7,18 @@ namespace AIChatBot.Services
     public class ChatService
     {
         private readonly IChatClient _chatClient;
-        private readonly ConversationMemoryService _memory;
+        private readonly IChatMemoryRepository _memoryRepository;
         private readonly RagService _rag;
         private readonly ILogger<ChatService> _logger;
 
         public ChatService(
             IChatClient chatClient,
-            ConversationMemoryService memory,
+            IChatMemoryRepository memoryRepository,
             RagService rag,
             ILogger<ChatService> logger)
         {
             _chatClient = chatClient;
-            _memory = memory;
+            _memoryRepository = memoryRepository;
             _rag = rag;
             _logger = logger;
         }
@@ -28,28 +29,54 @@ namespace AIChatBot.Services
             {
                 _logger.LogInformation($"Yeni mesaj: {request.SessionId}");
 
-                // 1. RAG - Belge arama
-                var relevantDocs = _rag.SearchDocuments(request.Message);
+                // 1. RAG - Belge arama (veritabanından)
+                var relevantDocs = await _rag.SearchDocumentsAsync(request.Message);
+
+                // ✅ DEBUG: Bulunan belge sayısını logla
+                _logger.LogInformation($"RAG Sonucu: {relevantDocs.Count} belge bulundu");
+
+                if (relevantDocs.Any())
+                {
+                    foreach (var doc in relevantDocs)
+                    {
+                        _logger.LogInformation($"  - Belge: {doc.Title} (ID: {doc.Id})");
+                    }
+                }
+                else
+                {
+                    _logger.LogWarning($"⚠️ RAG: '{request.Message}' için belge bulunamadı!");
+                }
+
                 var ragContext = _rag.FormatDocumentsAsContext(relevantDocs);
 
-                _logger.LogInformation($"RAG Sonucu: {relevantDocs.Count} belge bulundu");
+                // ✅ DEBUG: RAG context'i logla
+                if (!string.IsNullOrEmpty(ragContext))
+                {
+                    _logger.LogInformation($"RAG Context:\n{ragContext}");
+                }
+                else
+                {
+                    _logger.LogWarning("⚠️ RAG Context boş!");
+                }
 
                 // 2. System prompt
                 var systemPrompt = BuildSystemPrompt(userContext, ragContext);
 
-                // 3. Geçmişi al (System mesaj hariç - her seferinde yeniden oluşturacağız)
-                var messages = _memory.GetHistory(request.SessionId)
-                    .Where(m => m.Role != ChatRole.System)
-                    .ToList();
+                // ✅ DEBUG: System prompt'u logla
+                _logger.LogInformation($"System Prompt:\n{systemPrompt}");
 
-                // 4. System prompt'u ekle (en başa)
+                // 3. Geçmişi al (veritabanından)
+                var messages = await _memoryRepository.GetHistoryAsync(request.SessionId);
+                messages = messages.Where(m => m.Role != ChatRole.System).ToList();
+
+                // 4. System prompt'u ekle
                 messages.Insert(0, new ChatMessage(ChatRole.System, systemPrompt));
 
                 // 5.  Kullanıcı mesajını ekle
                 var userMessage = new ChatMessage(ChatRole.User, request.Message);
                 messages.Add(userMessage);
 
-                _logger.LogInformation("LLM'e istek atılıyor.. .");
+                _logger.LogInformation("LLM'e istek atılıyor...");
 
                 // 6. LLM'den cevap al
                 var responseText = "";
@@ -60,11 +87,22 @@ namespace AIChatBot.Services
 
                 _logger.LogInformation($"LLM Cevabı: {responseText}");
 
-                // 7. ✅ Sadece user ve assistant mesajlarını kaydet (duplicate önleme)
-                _memory.AddMessage(request.SessionId, userMessage);
+                // 7.  Mesajları veritabanına kaydet
+                await _memoryRepository.SaveMessageAsync(
+                    request.SessionId,
+                    userContext.UserId,
+                    userContext.UserName,
+                    "user",
+                    request.Message
+                );
 
-                var assistantMessage = new ChatMessage(ChatRole.Assistant, responseText);
-                _memory.AddMessage(request.SessionId, assistantMessage);
+                await _memoryRepository.SaveMessageAsync(
+                    request.SessionId,
+                    userContext.UserId,
+                    userContext.UserName,
+                    "assistant",
+                    responseText
+                );
 
                 return new AIChatBot.Models.ChatResponse
                 {
@@ -75,7 +113,7 @@ namespace AIChatBot.Services
             }
             catch (Exception ex)
             {
-                _logger.LogError($"Hata: {ex.Message}");
+                _logger.LogError($"Hata: {ex.Message}\nStackTrace: {ex.StackTrace}");
                 return new AIChatBot.Models.ChatResponse
                 {
                     SessionId = request.SessionId,
@@ -87,22 +125,36 @@ namespace AIChatBot.Services
 
         private string BuildSystemPrompt(UserContext userContext, string ragContext)
         {
-            // ✅ Çok daha temiz ve doğal prompt
-            var prompt = "Sen profesyonel bir müşteri destek temsilcisisin. ";
+            var prompt = @"Sen bir müşteri destek asistanısın. 
 
-            // ✅ RAG context varsa doğrudan bilgi olarak sun
+KURALLAR:
+1.  SADECE bilgi bankasındaki bilgileri kullan
+2.  Bilmediğin şeyi ASLA uydurma
+3. Türkçe konuş
+
+⚠️ ÖNEMLİ FİYAT KURALI:
+- Eğer kullanıcı 'kampanya', 'indirim', 'kış' kelimesini kullanıyorsa:
+  → SADECE kampanya belgesindeki '→' işaretinden SONRA​KI fiyatı söyle
+  → '960 TL' gibi indirimli fiyatı kullan
+- Normal fiyat sorarsa normal belgedeki fiyatı söyle";
+
             if (!string.IsNullOrEmpty(ragContext))
             {
                 prompt += $"\n\n{ragContext}\n\n";
-                prompt += "Yukarıdaki bilgileri kullanarak müşteriye kısa ve net cevaplar ver.  ";
+                prompt += "SADECE yukarıdaki bilgileri kullan! ";
             }
-
-            prompt += "Sadece Türkçe konuş. Nazik ve yardımsever ol. ";
 
             return prompt;
         }
 
-        public List<ChatMessage> GetSessionHistory(string sessionId) => _memory.GetHistory(sessionId);
-        public void ClearSession(string sessionId) => _memory.ClearSession(sessionId);
+        public async Task<List<ChatMessage>> GetSessionHistoryAsync(string sessionId)
+        {
+            return await _memoryRepository.GetHistoryAsync(sessionId);
+        }
+
+        public async Task ClearSessionAsync(string sessionId)
+        {
+            await _memoryRepository.ClearSessionAsync(sessionId);
+        }
     }
 }

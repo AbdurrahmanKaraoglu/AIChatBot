@@ -1,58 +1,68 @@
 ﻿using AIChatBot.Models;
+using AIChatBot.Repository.KnowledgeBase;
 
 namespace AIChatBot.Services
 {
     public class RagService
     {
-        private readonly List<Document> _documents = new()
+        private readonly IKnowledgeBaseRepository _knowledgeBaseRepository;
+        private readonly ILogger<RagService> _logger;
+
+        public RagService(IKnowledgeBaseRepository knowledgeBaseRepository, ILogger<RagService> logger)
         {
-            new Document
+            _knowledgeBaseRepository = knowledgeBaseRepository;
+            _logger = logger;
+        }
+
+        public async Task<List<Document>> SearchDocumentsAsync(string query)
+        {
+            // ✅ Türkçe stopwords'leri çıkar ve keyword'leri ayır
+            var keywords = ExtractKeywords(query);
+
+            _logger.LogInformation($"[RAG] Query: '{query}' → Keywords: {string.Join(", ", keywords)}");
+
+            var allDocuments = new List<Document>();
+
+            // Her keyword için arama yap
+            foreach (var keyword in keywords)
             {
-                Id = 1,
-                Title = "Ürünler",
-                Category = "Info",
-                Content = "Ürün A: 500 TL, Ürün B: 1500 TL.  Her iki ürün de stokta mevcuttur."
-            },
-            new Document
-            {
-                Id = 2,
-                Title = "Kargo",
-                Category = "FAQ",
-                Content = "Kargo ücreti 100 TL ve üzeri siparişlerde ücretsizdir.  100 TL altı siparişlerde kargo ücreti 30 TL'dir.  Kargolar 2-5 iş günü içinde teslim edilir."
-            },
-            new Document
-            {
-                Id = 3,
-                Title = "İade",
-                Category = "FAQ",
-                Content = "Ürünü teslim aldıktan sonra 14 gün içinde iade edebilirsiniz.  İade için ürünün kullanılmamış ve ambalajında olması gerekir.  İade kargo ücreti tarafımızca karşılanır."
-            },
-            new Document
-            {
-                Id = 4,
-                Title = "Ödeme",
-                Category = "Info",
-                Content = "Kredi kartı, banka havalesi ve kapıda ödeme seçeneklerini kabul ediyoruz. Taksit imkanları mevcuttur."
+                var docs = await _knowledgeBaseRepository.SearchDocuments(keyword);
+                allDocuments.AddRange(docs);
             }
-        };
 
-        public List<Document> SearchDocuments(string query)
-        {
-            if (string.IsNullOrWhiteSpace(query))
-                return new List<Document>();
-
-            var lowerQuery = query.ToLower();
-
-            return _documents
-                .Where(d =>
-                    d.Title.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-                    d.Content.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-                    (lowerQuery.Contains("ürün") || lowerQuery.Contains("fiyat")) && d.Title == "Ürünler" ||
-                    (lowerQuery.Contains("kargo") || lowerQuery.Contains("teslimat")) && d.Title == "Kargo" ||
-                    (lowerQuery.Contains("iade") || lowerQuery.Contains("geri")) && d.Title == "İade" ||
-                    (lowerQuery.Contains("ödeme") || lowerQuery.Contains("ücret") || lowerQuery.Contains("taksit")) && d.Title == "Ödeme"
-                )
+            // Duplicate'leri temizle
+            var uniqueDocs = allDocuments
+                .GroupBy(d => d.Id)
+                .Select(g => g.First())
                 .ToList();
+
+            _logger.LogInformation($"[RAG] Toplam {uniqueDocs.Count} benzersiz belge bulundu");
+
+            return uniqueDocs;
+        }
+
+        private List<string> ExtractKeywords(string query)
+        {
+            // Türkçe stopwords (gereksiz kelimeler)
+            var stopwords = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "bir", "ve", "veya", "ile", "için", "ne", "nedir", "nasıl",
+                "mi", "mu", "mı", "mü", "da", "de", "ta", "te",
+                "kaç", "hangi", "şu", "bu", "o"
+            };
+
+            // ✅ String array kullan (char array yerine)
+            var separators = new[] { " ", "? ", "!", ".", ",", ";", ":" };
+
+            var words = query
+                .ToLowerInvariant()
+                .Split(separators, StringSplitOptions.RemoveEmptyEntries)
+                .Where(w => w.Length > 2 && !stopwords.Contains(w))
+                .Distinct()
+                .ToList();
+
+            // En az bir keyword yoksa orijinal query'yi kullan
+            return words.Any() ? words : new List<string> { query };
         }
 
         public string FormatDocumentsAsContext(List<Document> documents)
@@ -63,6 +73,9 @@ namespace AIChatBot.Services
                    string.Join("\n", documents.Select(d => $"• {d.Title}: {d.Content}"));
         }
 
-        public List<Document> GetAllDocuments() => _documents;
+        public async Task<List<Document>> GetAllDocumentsAsync()
+        {
+            return await _knowledgeBaseRepository.GetAllDocuments();
+        }
     }
 }

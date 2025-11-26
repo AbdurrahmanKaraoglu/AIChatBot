@@ -1,8 +1,8 @@
 ﻿using AIChatBot.Models;
 using AIChatBot.Services;
+using AIChatBot.Repository.KnowledgeBase;
+using AIChatBot.Repository.ChatMemory;
 using Microsoft.Extensions.AI;
-using Microsoft.OpenApi;
-using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -38,46 +38,30 @@ catch (Exception ex)
     Console.WriteLine($"[ERROR] ❌ Ollama hatası: {ex.Message}");
 }
 
-// 4.  Servisler
-builder.Services.AddSingleton<ConversationMemoryService>();
+// 4. ✅ Repository ve Servisler (ADO.NET Tabanlı)
+builder.Services.AddScoped<IKnowledgeBaseRepository, KnowledgeBaseRepository>();
+builder.Services.AddScoped<IChatMemoryRepository, ChatMemoryRepository>();
 builder.Services.AddScoped<RagService>();
 builder.Services.AddScoped<ChatService>();
 
 // 5. Controllers ve Swagger
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(options =>
-{
-    var appSettings = builder.Configuration.GetSection("ApplicationSettings");
-
-    // ✅ OpenApiInfo (Microsoft.OpenApi. Models namespace'inden)
-    options.SwaggerDoc("v1", new OpenApiInfo
-    {
-        Title = appSettings["ApplicationName"] ?? "AI ChatBot API",
-        Version = appSettings["Version"] ?? "1. 0.0",
-        Description = "Ollama tabanlı AI Chatbot REST API"
-    });
-});
+builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
-// 6.  Middleware
-var enableSwagger = builder.Configuration.GetValue<bool>("ApplicationSettings:EnableSwagger");
-
-if (app.Environment.IsDevelopment() || enableSwagger)
+// 6. Middleware
+if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
-    app.UseSwaggerUI(options =>
-    {
-        options.SwaggerEndpoint("/swagger/v1/swagger.json", "AI ChatBot API v1");
-        options.RoutePrefix = "swagger";
-    });
+    app.UseSwaggerUI();
 }
 
 app.UseAuthorization();
 app.MapControllers();
 
-// 7.  Başlatma mesajları
+// 7. Başlatma mesajları
 Console.WriteLine("========================================");
 Console.WriteLine("✅ AI ChatBot API Hazır!");
 Console.WriteLine("========================================");

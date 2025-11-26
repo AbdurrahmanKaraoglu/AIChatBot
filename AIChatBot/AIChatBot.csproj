@@ -15,6 +15,7 @@
 
     <!-- Swagger/OpenAPI - API dokümantasyonu -->
     <PackageReference Include="Swashbuckle.AspNetCore" Version="7.2.0" />
+    <PackageReference Include="System.Data.SqlClient" Version="4.9.0" />
   </ItemGroup>
 
 </Project>

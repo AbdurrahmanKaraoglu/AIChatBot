@@ -1,7 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using AIChatBot.Models;
 using AIChatBot.Services;
-using Microsoft.Extensions.AI; // ChatRole için gerekli
+using Microsoft.Extensions.AI;
 
 namespace AIChatBot.Controllers
 {
@@ -35,10 +35,11 @@ namespace AIChatBot.Controllers
         }
 
         [HttpGet("history")]
-        public ActionResult GetHistory([FromQuery] string sessionId)
+        public async Task<ActionResult> GetHistory([FromQuery] string sessionId)
         {
-            var history = _chatService.GetSessionHistory(sessionId);
-            // ChatMessage'ı anonim objeye çeviriyoruz ki JSON serileştirme düzgün olsun
+            // ✅ Async metod kullan
+            var history = await _chatService.GetSessionHistoryAsync(sessionId);
+
             var formatted = history.Select(m => new
             {
                 role = m.Role.ToString(),
@@ -49,16 +50,19 @@ namespace AIChatBot.Controllers
         }
 
         [HttpDelete("clear")]
-        public ActionResult ClearSession([FromQuery] string sessionId)
+        public async Task<ActionResult> ClearSession([FromQuery] string sessionId)
         {
-            _chatService.ClearSession(sessionId);
+            // ✅ Async metod kullan
+            await _chatService.ClearSessionAsync(sessionId);
             return Ok(new { message = "Temizlendi" });
         }
 
         [HttpGet("search")]
-        public ActionResult SearchDocs([FromQuery] string query)
+        public async Task<ActionResult> SearchDocs([FromQuery] string query)
         {
-            return Ok(_rag.SearchDocuments(query ?? ""));
+            // ✅ Async metod kullan
+            var documents = await _rag.SearchDocumentsAsync(query ?? "");
+            return Ok(documents);
         }
     }
 }
