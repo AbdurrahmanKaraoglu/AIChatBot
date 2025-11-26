@@ -1,12 +1,9 @@
 ﻿using AIChatBot.Models;
 using System.Data;
-using System.Data.SqlClient;
+using Microsoft.Data.SqlClient;
 
 namespace AIChatBot.Repository.KnowledgeBase
 {
-    /// <summary>
-    /// KnowledgeBase repository implementation (ADO.NET)
-    /// </summary>
     public class KnowledgeBaseRepository : IKnowledgeBaseRepository
     {
         private readonly string _connectionString;
@@ -23,29 +20,20 @@ namespace AIChatBot.Repository.KnowledgeBase
 
         #region Keyword Search
 
-        /// <summary>
-        /// Keyword-based search (sp_SearchKnowledgeBase)
-        /// </summary>
         public async Task<List<Document>> SearchDocuments(string query)
         {
             var documents = new List<Document>();
 
             try
             {
-                _logger.LogInformation(
-                    "[SEARCH-KEYWORD] Query: '{Query}'",
-                    query
-                );
+                _logger.LogInformation("[SEARCH-KEYWORD] Query: '{Query}'", query);
 
                 using (SqlConnection conn = new SqlConnection(_connectionString))
                 {
                     using (SqlCommand cmd = new SqlCommand("sp_SearchKnowledgeBase", conn))
                     {
                         cmd.CommandType = CommandType.StoredProcedure;
-                        cmd.Parameters.Add(new SqlParameter("@SearchQuery", SqlDbType.NVarChar, 200)
-                        {
-                            Value = query ?? ""
-                        });
+                        cmd.Parameters.Add(new SqlParameter("@SearchQuery", SqlDbType.NVarChar, 200) { Value = query ?? "" });
 
                         await conn.OpenAsync();
 
@@ -59,18 +47,11 @@ namespace AIChatBot.Repository.KnowledgeBase
                     }
                 }
 
-                _logger.LogInformation(
-                    "[SEARCH-KEYWORD] {Count} belge bulundu",
-                    documents.Count
-                );
+                _logger.LogInformation("[SEARCH-KEYWORD] {Count} belge bulundu", documents.Count);
             }
             catch (Exception ex)
             {
-                _logger.LogError(
-                    ex,
-                    "[SEARCH-KEYWORD-ERROR] Query: '{Query}'",
-                    query
-                );
+                _logger.LogError(ex, "[SEARCH-KEYWORD-ERROR] Query: '{Query}'", query);
                 throw;
             }
 
@@ -81,9 +62,6 @@ namespace AIChatBot.Repository.KnowledgeBase
 
         #region Smart Product Search
 
-        /// <summary>
-        /// Akıllı ürün arama (sp_SmartProductSearch)
-        /// </summary>
         public async Task<List<Document>> SmartProductSearch(
             string query,
             decimal? minPrice = null,
@@ -96,10 +74,7 @@ namespace AIChatBot.Repository.KnowledgeBase
             {
                 _logger.LogInformation(
                     "[SMART-SEARCH] Query: '{Query}', MinPrice: {MinPrice}, MaxPrice: {MaxPrice}, Category: {Category}",
-                    query,
-                    minPrice,
-                    maxPrice,
-                    category
+                    query, minPrice, maxPrice, category
                 );
 
                 using (SqlConnection conn = new SqlConnection(_connectionString))
@@ -107,26 +82,10 @@ namespace AIChatBot.Repository.KnowledgeBase
                     using (SqlCommand cmd = new SqlCommand("sp_SmartProductSearch", conn))
                     {
                         cmd.CommandType = CommandType.StoredProcedure;
-
-                        cmd.Parameters.Add(new SqlParameter("@SearchQuery", SqlDbType.NVarChar, 200)
-                        {
-                            Value = query ?? ""
-                        });
-
-                        cmd.Parameters.Add(new SqlParameter("@MinPrice", SqlDbType.Decimal)
-                        {
-                            Value = (object?)minPrice ?? DBNull.Value
-                        });
-
-                        cmd.Parameters.Add(new SqlParameter("@MaxPrice", SqlDbType.Decimal)
-                        {
-                            Value = (object?)maxPrice ?? DBNull.Value
-                        });
-
-                        cmd.Parameters.Add(new SqlParameter("@Category", SqlDbType.NVarChar, 100)
-                        {
-                            Value = (object?)category ?? DBNull.Value
-                        });
+                        cmd.Parameters.Add(new SqlParameter("@SearchQuery", SqlDbType.NVarChar, 200) { Value = query ?? "" });
+                        cmd.Parameters.Add(new SqlParameter("@MinPrice", SqlDbType.Decimal) { Value = (object?)minPrice ?? DBNull.Value });
+                        cmd.Parameters.Add(new SqlParameter("@MaxPrice", SqlDbType.Decimal) { Value = (object?)maxPrice ?? DBNull.Value });
+                        cmd.Parameters.Add(new SqlParameter("@Category", SqlDbType.NVarChar, 100) { Value = (object?)category ?? DBNull.Value });
 
                         await conn.OpenAsync();
 
@@ -140,18 +99,11 @@ namespace AIChatBot.Repository.KnowledgeBase
                     }
                 }
 
-                _logger.LogInformation(
-                    "[SMART-SEARCH] {Count} ürün bulundu",
-                    documents.Count
-                );
+                _logger.LogInformation("[SMART-SEARCH] {Count} ürün bulundu", documents.Count);
             }
             catch (Exception ex)
             {
-                _logger.LogError(
-                    ex,
-                    "[SMART-SEARCH-ERROR] Query: '{Query}'",
-                    query
-                );
+                _logger.LogError(ex, "[SMART-SEARCH-ERROR] Query: '{Query}'", query);
                 throw;
             }
 
@@ -160,10 +112,10 @@ namespace AIChatBot.Repository.KnowledgeBase
 
         #endregion
 
-        #region Vector Search
+        #region Vector Search (SQL Server 2025 VECTOR)
 
         /// <summary>
-        /// Vector-based semantic search (Manual cosine similarity)
+        /// Vector-based semantic search (SQL Server 2025 VECTOR_DISTANCE)
         /// </summary>
         public async Task<List<(Document Doc, float Similarity)>> VectorSearchAsync(
             float[] queryVector,
@@ -179,8 +131,7 @@ namespace AIChatBot.Repository.KnowledgeBase
 
                 _logger.LogInformation(
                     "[VECTOR-SEARCH] TopK: {TopK}, MinSimilarity: {MinSimilarity}",
-                    topK,
-                    minSimilarity
+                    topK, minSimilarity
                 );
 
                 using (SqlConnection conn = new SqlConnection(_connectionString))
@@ -189,10 +140,12 @@ namespace AIChatBot.Repository.KnowledgeBase
                     {
                         cmd.CommandType = CommandType.StoredProcedure;
 
-                        // Query vector parametresi (kullanılmayacak ama SP signature için)
-                        cmd.Parameters.Add(new SqlParameter("@QueryVector", SqlDbType.VarBinary)
+                        // ✅ SQL Server 2025: VECTOR parametresi (JSON string olarak)
+                        var vectorJson = "[" + string.Join(",", queryVector.Select(v => v.ToString("F6"))) + "]";
+
+                        cmd.Parameters.Add(new SqlParameter("@QueryVector", SqlDbType.NVarChar)
                         {
-                            Value = SerializeVector(queryVector)
+                            Value = vectorJson
                         });
                         cmd.Parameters.Add(new SqlParameter("@TopK", SqlDbType.Int) { Value = topK });
                         cmd.Parameters.Add(new SqlParameter("@MinSimilarity", SqlDbType.Float) { Value = minSimilarity });
@@ -213,96 +166,34 @@ namespace AIChatBot.Repository.KnowledgeBase
                                         : reader.GetString(reader.GetOrdinal("Category"))
                                 };
 
-                                // ✅ Embedding'i oku
-                                var embeddingBytes = reader.IsDBNull(reader.GetOrdinal("Embedding"))
-                                    ? null
-                                    : (byte[])reader["Embedding"];
+                                var similarity = (float)reader.GetDouble(reader.GetOrdinal("Similarity"));
 
-                                if (embeddingBytes != null)
-                                {
-                                    var docEmbedding = DeserializeVector(embeddingBytes);
+                                results.Add((doc, similarity));
 
-                                    // ✅ C# tarafında cosine similarity hesapla
-                                    var similarity = CalculateCosineSimilarity(queryVector, docEmbedding);
-
-                                    // Minimum similarity filtresi
-                                    if (similarity >= minSimilarity)
-                                    {
-                                        results.Add((doc, similarity));
-                                    }
-                                }
+                                _logger.LogDebug(
+                                    "[VECTOR-SEARCH] • {Title} (Similarity: {Similarity:P2})",
+                                    doc.Title, similarity
+                                );
                             }
                         }
                     }
                 }
 
-                // ✅ Similarity'ye göre sırala ve TopK al
-                results = results
-                    .OrderByDescending(r => r.Item2)
-                    .Take(topK)
-                    .ToList();
-
-                _logger.LogInformation(
-                    "[VECTOR-SEARCH] {Count} belge bulundu",
-                    results.Count
-                );
-
-                foreach (var (doc, similarity) in results)
-                {
-                    _logger.LogDebug(
-                        "[VECTOR-SEARCH] • {Title} (Similarity: {Similarity:P2})",
-                        doc.Title,
-                        similarity
-                    );
-                }
+                _logger.LogInformation("[VECTOR-SEARCH] {Count} belge bulundu", results.Count);
             }
             catch (Exception ex)
             {
-                _logger.LogError(
-                    ex,
-                    "[VECTOR-SEARCH-ERROR] TopK: {TopK}",
-                    topK
-                );
+                _logger.LogError(ex, "[VECTOR-SEARCH-ERROR] TopK: {TopK}", topK);
                 throw;
             }
 
             return results;
         }
 
-        /// <summary>
-        /// İki vektör arasındaki cosine similarity hesaplar (0-1 arası)
-        /// </summary>
-        private float CalculateCosineSimilarity(float[] vector1, float[] vector2)
-        {
-            if (vector1.Length != vector2.Length)
-                throw new ArgumentException("Vektörler aynı boyutta olmalı");
-
-            float dotProduct = 0;
-            float magnitude1 = 0;
-            float magnitude2 = 0;
-
-            for (int i = 0; i < vector1.Length; i++)
-            {
-                dotProduct += vector1[i] * vector2[i];
-                magnitude1 += vector1[i] * vector1[i];
-                magnitude2 += vector2[i] * vector2[i];
-            }
-
-            magnitude1 = (float)Math.Sqrt(magnitude1);
-            magnitude2 = (float)Math.Sqrt(magnitude2);
-
-            if (magnitude1 == 0 || magnitude2 == 0)
-                return 0;
-
-            return dotProduct / (magnitude1 * magnitude2);
-        }
         #endregion
 
         #region Document CRUD
 
-        /// <summary>
-        /// Tüm aktif belgeleri getirir
-        /// </summary>
         public async Task<List<Document>> GetAllDocuments()
         {
             var documents = new List<Document>();
@@ -317,8 +208,6 @@ namespace AIChatBot.Repository.KnowledgeBase
                         "SELECT DocumentId, Title, Content, Category FROM dbo.KnowledgeBase WHERE IsActive = 1",
                         conn))
                     {
-                        cmd.CommandType = CommandType.Text;
-
                         await conn.OpenAsync();
 
                         using (SqlDataReader reader = await cmd.ExecuteReaderAsync())
@@ -342,9 +231,6 @@ namespace AIChatBot.Repository.KnowledgeBase
             return documents;
         }
 
-        /// <summary>
-        /// Belge ID'sine göre getirir
-        /// </summary>
         public async Task<Document?> GetDocumentByIdAsync(int documentId)
         {
             try
@@ -353,11 +239,10 @@ namespace AIChatBot.Repository.KnowledgeBase
 
                 using (SqlConnection conn = new SqlConnection(_connectionString))
                 {
-                    using (SqlCommand cmd = new SqlCommand(
-                        "SELECT DocumentId, Title, Content, Category FROM dbo.KnowledgeBase WHERE DocumentId = @Id AND IsActive = 1",
-                        conn))
+                    using (SqlCommand cmd = new SqlCommand("sp_KnowledgeBase_GetById", conn))
                     {
-                        cmd.Parameters.Add(new SqlParameter("@Id", documentId));
+                        cmd.CommandType = CommandType.StoredProcedure;
+                        cmd.Parameters.Add(new SqlParameter("@DocumentId", documentId));
 
                         await conn.OpenAsync();
 
@@ -381,34 +266,32 @@ namespace AIChatBot.Repository.KnowledgeBase
             }
         }
 
-        /// <summary>
-        /// Belge ekler (embedding ile)
-        /// </summary>
         public async Task<int> AddDocumentAsync(Document document, float[] embedding)
         {
             try
             {
                 _logger.LogInformation(
                     "[ADD-DOCUMENT] Title: '{Title}', Category: {Category}",
-                    document.Title,
-                    document.Category
+                    document.Title, document.Category
                 );
 
                 using (SqlConnection conn = new SqlConnection(_connectionString))
                 {
-                    using (SqlCommand cmd = new SqlCommand(
-                        @"INSERT INTO dbo.KnowledgeBase (Title, Content, Category, Tags, Embedding, IsActive, CreatedDate)
-                          VALUES (@Title, @Content, @Category, @Tags, @Embedding, 1, GETDATE());
-                          SELECT CAST(SCOPE_IDENTITY() AS INT);",
-                        conn))
+                    using (SqlCommand cmd = new SqlCommand("sp_KnowledgeBase_Add", conn))
                     {
+                        cmd.CommandType = CommandType.StoredProcedure;
+
                         cmd.Parameters.Add(new SqlParameter("@Title", document.Title));
                         cmd.Parameters.Add(new SqlParameter("@Content", document.Content));
                         cmd.Parameters.Add(new SqlParameter("@Category", (object?)document.Category ?? DBNull.Value));
-                        cmd.Parameters.Add(new SqlParameter("@Tags", DBNull.Value)); // Tags eklenebilir
-                        cmd.Parameters.Add(new SqlParameter("@Embedding", SqlDbType.VarBinary)
+                        cmd.Parameters.Add(new SqlParameter("@Tags", DBNull.Value));
+                        cmd.Parameters.Add(new SqlParameter("@Price", DBNull.Value));
+
+                        // ✅ VECTOR parametresi (JSON string)
+                        var vectorJson = "[" + string.Join(",", embedding.Select(v => v.ToString("F6"))) + "]";
+                        cmd.Parameters.Add(new SqlParameter("@Embedding", SqlDbType.NVarChar)
                         {
-                            Value = SerializeVector(embedding)
+                            Value = vectorJson
                         });
 
                         await conn.OpenAsync();
@@ -428,42 +311,29 @@ namespace AIChatBot.Repository.KnowledgeBase
             }
         }
 
-        /// <summary>
-        /// Belge günceller
-        /// </summary>
         public async Task UpdateDocumentAsync(Document document)
         {
             try
             {
-                _logger.LogInformation(
-                    "[UPDATE-DOCUMENT] DocumentId: {DocumentId}",
-                    document.Id
-                );
+                _logger.LogInformation("[UPDATE-DOCUMENT] DocumentId: {DocumentId}", document.Id);
 
                 using (SqlConnection conn = new SqlConnection(_connectionString))
                 {
-                    using (SqlCommand cmd = new SqlCommand(
-                        @"UPDATE dbo.KnowledgeBase
-                          SET Title = @Title,
-                              Content = @Content,
-                              Category = @Category,
-                              UpdatedDate = GETDATE()
-                          WHERE DocumentId = @Id",
-                        conn))
+                    using (SqlCommand cmd = new SqlCommand("sp_KnowledgeBase_Update", conn))
                     {
-                        cmd.Parameters.Add(new SqlParameter("@Id", document.Id));
+                        cmd.CommandType = CommandType.StoredProcedure;
+
+                        cmd.Parameters.Add(new SqlParameter("@DocumentId", document.Id));
                         cmd.Parameters.Add(new SqlParameter("@Title", document.Title));
                         cmd.Parameters.Add(new SqlParameter("@Content", document.Content));
                         cmd.Parameters.Add(new SqlParameter("@Category", (object?)document.Category ?? DBNull.Value));
+                        cmd.Parameters.Add(new SqlParameter("@Tags", DBNull.Value));
+                        cmd.Parameters.Add(new SqlParameter("@Price", DBNull.Value));
 
                         await conn.OpenAsync();
-
                         var rowsAffected = await cmd.ExecuteNonQueryAsync();
 
-                        _logger.LogInformation(
-                            "[UPDATE-DOCUMENT] ✅ {RowsAffected} satır güncellendi",
-                            rowsAffected
-                        );
+                        _logger.LogInformation("[UPDATE-DOCUMENT] ✅ {RowsAffected} satır güncellendi", rowsAffected);
                     }
                 }
             }
@@ -474,38 +344,31 @@ namespace AIChatBot.Repository.KnowledgeBase
             }
         }
 
-        /// <summary>
-        /// Belgeye embedding ekler (migration için)
-        /// </summary>
         public async Task UpdateDocumentEmbeddingAsync(int documentId, float[] embedding)
         {
             try
             {
-                _logger.LogInformation(
-                    "[UPDATE-EMBEDDING] DocumentId: {DocumentId}",
-                    documentId
-                );
+                _logger.LogInformation("[UPDATE-EMBEDDING] DocumentId: {DocumentId}", documentId);
 
                 using (SqlConnection conn = new SqlConnection(_connectionString))
                 {
-                    using (SqlCommand cmd = new SqlCommand(
-                        "UPDATE dbo.KnowledgeBase SET Embedding = @Embedding WHERE DocumentId = @Id",
-                        conn))
+                    using (SqlCommand cmd = new SqlCommand("sp_KnowledgeBase_UpdateEmbedding", conn))
                     {
-                        cmd.Parameters.Add(new SqlParameter("@Id", documentId));
-                        cmd.Parameters.Add(new SqlParameter("@Embedding", SqlDbType.VarBinary)
+                        cmd.CommandType = CommandType.StoredProcedure;
+
+                        cmd.Parameters.Add(new SqlParameter("@DocumentId", documentId));
+
+                        // ✅ VECTOR parametresi (JSON string)
+                        var vectorJson = "[" + string.Join(",", embedding.Select(v => v.ToString("F6"))) + "]";
+                        cmd.Parameters.Add(new SqlParameter("@Embedding", SqlDbType.NVarChar)
                         {
-                            Value = SerializeVector(embedding)
+                            Value = vectorJson
                         });
 
                         await conn.OpenAsync();
-
                         var rowsAffected = await cmd.ExecuteNonQueryAsync();
 
-                        _logger.LogInformation(
-                            "[UPDATE-EMBEDDING] ✅ {RowsAffected} satır güncellendi",
-                            rowsAffected
-                        );
+                        _logger.LogInformation("[UPDATE-EMBEDDING] ✅ {RowsAffected} satır güncellendi", rowsAffected);
                     }
                 }
             }
@@ -516,9 +379,6 @@ namespace AIChatBot.Repository.KnowledgeBase
             }
         }
 
-        /// <summary>
-        /// Belge siler (soft delete)
-        /// </summary>
         public async Task DeleteDocumentAsync(int documentId)
         {
             try
@@ -527,20 +387,15 @@ namespace AIChatBot.Repository.KnowledgeBase
 
                 using (SqlConnection conn = new SqlConnection(_connectionString))
                 {
-                    using (SqlCommand cmd = new SqlCommand(
-                        "UPDATE dbo.KnowledgeBase SET IsActive = 0 WHERE DocumentId = @Id",
-                        conn))
+                    using (SqlCommand cmd = new SqlCommand("sp_KnowledgeBase_Delete", conn))
                     {
-                        cmd.Parameters.Add(new SqlParameter("@Id", documentId));
+                        cmd.CommandType = CommandType.StoredProcedure;
+                        cmd.Parameters.Add(new SqlParameter("@DocumentId", documentId));
 
                         await conn.OpenAsync();
-
                         var rowsAffected = await cmd.ExecuteNonQueryAsync();
 
-                        _logger.LogInformation(
-                            "[DELETE-DOCUMENT] ✅ {RowsAffected} satır silindi",
-                            rowsAffected
-                        );
+                        _logger.LogInformation("[DELETE-DOCUMENT] ✅ {RowsAffected} satır silindi", rowsAffected);
                     }
                 }
             }
@@ -555,9 +410,6 @@ namespace AIChatBot.Repository.KnowledgeBase
 
         #region Helper Methods
 
-        /// <summary>
-        /// SqlDataReader'dan Document nesnesini okur
-        /// </summary>
         private Document ReadDocumentFromReader(SqlDataReader reader)
         {
             return new Document
@@ -569,26 +421,6 @@ namespace AIChatBot.Repository.KnowledgeBase
                     ? ""
                     : reader.GetString(reader.GetOrdinal("Category"))
             };
-        }
-
-        /// <summary>
-        /// Float array'i byte array'e çevirir (SQL VECTOR için)
-        /// </summary>
-        private byte[] SerializeVector(float[] vector)
-        {
-            byte[] bytes = new byte[vector.Length * sizeof(float)];
-            Buffer.BlockCopy(vector, 0, bytes, 0, bytes.Length);
-            return bytes;
-        }
-
-        /// <summary>
-        /// Byte array'i float array'e çevirir (SQL VECTOR'den okuma)
-        /// </summary>
-        private float[] DeserializeVector(byte[] bytes)
-        {
-            float[] vector = new float[bytes.Length / sizeof(float)];
-            Buffer.BlockCopy(bytes, 0, vector, 0, bytes.Length);
-            return vector;
         }
 
         #endregion

@@ -1,6 +1,6 @@
-﻿using Microsoft.Extensions.AI;
+﻿using Microsoft.Data.SqlClient;  // ✅ System.Data.SqlClient → Microsoft.Data.SqlClient
+using Microsoft.Extensions.AI;
 using System.Data;
-using System.Data.SqlClient;
 
 namespace AIChatBot.Repository.ChatMemory
 {
@@ -9,11 +9,11 @@ namespace AIChatBot.Repository.ChatMemory
         private readonly string _connectionString;
         private readonly ILogger<ChatMemoryRepository> _logger;
 
-        public ChatMemoryRepository(IConfiguration configuration, ILogger<ChatMemoryRepository> logger)
+        public ChatMemoryRepository(IConfiguration configuration, ILogger<ChatMemoryRepository> _logger)
         {
             _connectionString = configuration.GetConnectionString("DefaultConnection")
                 ?? throw new ArgumentNullException(nameof(configuration));
-            _logger = logger;
+            this._logger = _logger;
         }
 
         public async Task SaveMessageAsync(string sessionId, string userId, string userName, string role, string content)

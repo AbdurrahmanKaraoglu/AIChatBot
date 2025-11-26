@@ -1,8 +1,7 @@
 ﻿using AIChatBot.Models;
-using AIChatBot.Repository.ChatMemory;
-using AIChatBot.Repository.KnowledgeBase;
 using AIChatBot.Services;
-using AIChatBot.Tools;
+using AIChatBot.Repository.KnowledgeBase;
+using AIChatBot.Repository.ChatMemory;
 using Microsoft.Extensions.AI;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -12,41 +11,6 @@ var ollamaSettings = builder.Configuration.GetSection("Ollama").Get<OllamaSettin
                      ?? new OllamaSettings();
 
 builder.Services.AddSingleton(ollamaSettings);
-
-// Tool sınıflarını kaydet
-builder.Services.AddScoped<GetProductInfoTool>();
-builder.Services.AddScoped<CalculateShippingTool>();
-builder.Services.AddScoped<SearchRAGTool>();
-
-// AIFunctionFactory ile tool registration
-builder.Services.AddSingleton(sp =>
-{
-    var productTool = sp.GetRequiredService<GetProductInfoTool>();
-    return AIFunctionFactory.Create(productTool.Execute, "GetProductInfo");
-});
-
-builder.Services.AddSingleton(sp =>
-{
-    var shippingTool = sp.GetRequiredService<CalculateShippingTool>();
-    return AIFunctionFactory.Create(shippingTool.Execute, "CalculateShipping");
-});
-
-builder.Services.AddSingleton(sp =>
-{
-    var ragTool = sp.GetRequiredService<SearchRAGTool>();
-    return AIFunctionFactory.Create(ragTool.Execute, "SearchRAG");
-});
-
-// Tüm tool'ları topla
-builder.Services.AddSingleton<IEnumerable<AIFunction>>(sp =>
-{
-    return new[]
-    {
-        sp.GetServices<AIFunction>().First(f => f. Metadata.Name == "GetProductInfo"),
-        sp.GetServices<AIFunction>().First(f => f.Metadata.Name == "CalculateShipping"),
-        sp.GetServices<AIFunction>().First(f => f. Metadata.Name == "SearchRAG")
-    };
-});
 
 // 2. Loglama
 builder.Services.AddLogging(l => l.AddConsole());
@@ -74,20 +38,66 @@ catch (Exception ex)
     Console.WriteLine($"[ERROR] ❌ Ollama hatası: {ex.Message}");
 }
 
-// 4. ✅ Repository ve Servisler (ADO.NET Tabanlı)
+// ✅ 4. Tool Sınıfları (Eğer kullanılacaksa)
+// builder.Services.AddScoped<GetProductInfoTool>();
+// builder.Services.AddScoped<CalculateShippingTool>();
+// builder.Services. AddScoped<SearchRAGTool>();
+
+// ✅ 5. AITool Kaydı (YENİ - Microsoft.Extensions.AI 10.0)
+// Şimdilik tool calling devre dışı (llama3.1 gerektirir)
+var emptyTools = new List<AITool>(); // Boş tool listesi
+builder.Services.AddSingleton<IEnumerable<AITool>>(emptyTools);
+
+/* 
+// Tool calling aktif etmek için (llama3.1 yüklendikten sonra):
+builder.Services.AddSingleton<IEnumerable<AITool>>(sp =>
+{
+    var tools = new List<AITool>();
+    
+    // Tool 1: GetProductInfo
+    var getProductInfo = AIFunctionFactory.Create(
+        (int productId) =>
+        {
+            // Tool implementation
+            return $"Ürün ID {productId} bilgileri... ";
+        },
+        name: "GetProductInfo",
+        description: "Ürün bilgilerini getirir"
+    );
+    tools.Add(getProductInfo);
+    
+    // Tool 2: CalculateShipping
+    var calculateShipping = AIFunctionFactory.Create(
+        (decimal orderAmount) =>
+        {
+            return orderAmount >= 100
+                ? "Kargo ücretsiz"
+                : "Kargo: 30 TL";
+        },
+        name: "CalculateShipping",
+        description: "Kargo ücretini hesaplar"
+    );
+    tools.Add(calculateShipping);
+    
+    return tools;
+});
+*/
+
+// 6. Repository ve Servisler (ADO.NET Tabanlı)
 builder.Services.AddScoped<IKnowledgeBaseRepository, KnowledgeBaseRepository>();
 builder.Services.AddScoped<IChatMemoryRepository, ChatMemoryRepository>();
+builder.Services.AddScoped<EmbeddingService>();
 builder.Services.AddScoped<RagService>();
 builder.Services.AddScoped<ChatService>();
 
-// 5. Controllers ve Swagger
+// 7. Controllers ve Swagger
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
-// 6. Middleware
+// 8. Middleware
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -97,7 +107,7 @@ if (app.Environment.IsDevelopment())
 app.UseAuthorization();
 app.MapControllers();
 
-// 7. Başlatma mesajları
+// 9. Başlatma mesajları
 Console.WriteLine("========================================");
 Console.WriteLine("✅ AI ChatBot API Hazır!");
 Console.WriteLine("========================================");

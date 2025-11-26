@@ -1,7 +1,7 @@
 ﻿// Tools/CalculateShippingTool. cs
+using Microsoft.Data.SqlClient;
 using System.ComponentModel;
 using System.Data;
-using System.Data.SqlClient;
 
 namespace AIChatBot.Tools
 {
