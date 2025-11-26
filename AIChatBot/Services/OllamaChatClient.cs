@@ -19,23 +19,26 @@ namespace AIChatBot.Services
             Metadata = new ChatClientMetadata("Ollama", new Uri(endpoint), modelId);
         }
 
-        public async Task<Microsoft.Extensions.AI.ChatResponse> GetResponseAsync(
+        // ✅ IChatClient interface'inden gelen doğru metod
+        public async Task<ChatResponse> GetResponseAsync(
             IEnumerable<ChatMessage> chatMessages,
             ChatOptions? options = null,
             CancellationToken cancellationToken = default)
         {
             var request = BuildRequest(chatMessages, stream: false);
 
-            // PostAsJsonAsync kullanımı
             var response = await _httpClient.PostAsJsonAsync("/api/chat", request, cancellationToken);
             response.EnsureSuccessStatusCode();
 
             var ollamaResponse = await response.Content.ReadFromJsonAsync<OllamaResponse>(cancellationToken: cancellationToken);
 
-            // ChatResponse oluşturulurken ChatMessage nesnesi verilir
-            return new Microsoft.Extensions.AI.ChatResponse(new ChatMessage(ChatRole.Assistant, ollamaResponse?.Message?.Content ?? ""));
+            var assistantMessage = new ChatMessage(ChatRole.Assistant, ollamaResponse?.Message?.Content ?? "");
+
+            // ✅ ChatResponse constructor: ChatResponse(ChatMessage message)
+            return new ChatResponse(assistantMessage);
         }
 
+        // ✅ IChatClient interface'inden gelen doğru streaming metod
         public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
             IEnumerable<ChatMessage> chatMessages,
             ChatOptions? options = null,
@@ -63,7 +66,7 @@ namespace AIChatBot.Services
 
                 if (chunk?.Message?.Content != null)
                 {
-                    // HATA DÜZELTİLDİ: Property initializer yerine Constructor kullanıldı
+                    // ✅ ChatResponseUpdate constructor: ChatResponseUpdate(ChatRole role, string text)
                     yield return new ChatResponseUpdate(ChatRole.Assistant, chunk.Message.Content);
                 }
             }

@@ -20,7 +20,7 @@ namespace AIChatBot.Models
         public string Answer { get; set; } = string.Empty;
 
         /// <summary>
-        /// Hangi tool'lar kullanıldı?
+        /// Hangi tool'lar kullanıldı? 
         /// Örnek: ["GetCustomerInfo", "GetOrderHistory"]
         /// </summary>
         [JsonPropertyName("usedTools")]
@@ -36,6 +36,6 @@ namespace AIChatBot.Models
         /// Hata varsa hata mesajı
         /// </summary>
         [JsonPropertyName("errorMessage")]
-        public string ErrorMessage { get; set; }
+        public string? ErrorMessage { get; set; } // ✅ Nullable yapıldı
     }
 }

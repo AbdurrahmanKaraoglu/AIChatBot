@@ -15,11 +15,11 @@ namespace AIChatBot.Models
         public string SessionId { get; set; } = string.Empty;
 
         /// <summary>
-        /// Kullanıcının ID'si
+        /// Kullanıcının ID'si (Opsiyonel)
         /// Örnek: "user123"
         /// </summary>
         [JsonPropertyName("userId")]
-        public string UserId { get; set; }
+        public string? UserId { get; set; } // ✅ Nullable yapıldı
 
         /// <summary>
         /// Kullanıcının sorusu/mesajı

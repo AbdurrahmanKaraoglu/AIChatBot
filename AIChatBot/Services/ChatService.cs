@@ -1,5 +1,5 @@
-﻿using AIChatBot.Models; // Kendi modelleriniz (ChatRequest, UserContext vs.)
-using Microsoft.Extensions.AI; // ChatMessage, IChatClient vs.
+﻿using AIChatBot.Models;
+using Microsoft.Extensions.AI;
 
 namespace AIChatBot.Services
 {
@@ -22,7 +22,6 @@ namespace AIChatBot.Services
             _logger = logger;
         }
 
-        // Dönüş tipi: Sizin tanımladığınız AIChatBot.Models.ChatResponse
         public async Task<AIChatBot.Models.ChatResponse> ProcessMessageAsync(ChatRequest request, UserContext userContext)
         {
             try
@@ -32,7 +31,7 @@ namespace AIChatBot.Services
                 // 1. System Prompt
                 var systemPrompt = BuildSystemPrompt(userContext);
 
-                // 2. RAG (Belge Arama)
+                // 2.  RAG (Belge Arama)
                 var relevantDocs = _rag.SearchDocuments(request.Message);
                 var ragContext = _rag.FormatDocumentsAsContext(relevantDocs);
 
@@ -54,19 +53,20 @@ namespace AIChatBot.Services
                 // 6. LLM'e gönder
                 _logger.LogInformation("LLM'e istek atılıyor...");
 
-                // HATA DÜZELTİLDİ: İsim çakışmasını önlemek için tam yol (Namespace) belirtildi.
-                // Bu değişken kütüphaneden gelen cevaptır.
+                // ✅ GetResponseAsync kullanımı (IChatClient'in metodu)
                 Microsoft.Extensions.AI.ChatResponse llmResponse = await _chatClient.GetResponseAsync(messages);
 
-                // 7. Cevabı kaydet
-                _memory.AddMessage(request.SessionId, llmResponse.Message);
+                // ✅ llmResponse.Message property'si var
+                var assistantMessage = llmResponse.Message;
 
-                // 8. Kendi formatınıza çevirip döndürün
+                // 7. Cevabı kaydet
+                _memory.AddMessage(request.SessionId, assistantMessage);
+
+                // 8.  Kendi formatınıza çevirip döndürün
                 return new AIChatBot.Models.ChatResponse
                 {
                     SessionId = request.SessionId,
-                    // llmResponse.Message.Text özelliği kullanılır
-                    Answer = llmResponse.Message.Text ?? "Cevap üretilemedi.",
+                    Answer = assistantMessage.Text ?? "Cevap üretilemedi.",
                     Success = true
                 };
             }
@@ -84,10 +84,10 @@ namespace AIChatBot.Services
 
         private string BuildSystemPrompt(UserContext userContext)
         {
-            return $@"Sen yardımcı bir asistansın.
-            Kullanıcı: {userContext.UserName} ({userContext.Role})
-            Dili: Türkçe kullan.
-            Cevapları kısa ve net ver.";
+            return $@"Sen yardımcı bir asistansın. 
+Kullanıcı: {userContext.UserName} ({userContext.Role})
+Dili: Türkçe kullan.
+Cevapları kısa ve net ver.";
         }
 
         public List<ChatMessage> GetSessionHistory(string sessionId) => _memory.GetHistory(sessionId);
