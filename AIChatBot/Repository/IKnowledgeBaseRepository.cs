@@ -61,5 +61,12 @@ namespace AIChatBot.Repository.KnowledgeBase
         /// Belge ID'sine göre getirir
         /// </summary>
         Task<Document?> GetDocumentByIdAsync(int documentId);
+
+
+
+        // ✅ YENİ METODLAR - Migration için
+  
+        Task<Document?> GetDocumentById(int documentId);
+        Task<bool> UpdateEmbedding(int documentId, string embeddingJson);
     }
 }

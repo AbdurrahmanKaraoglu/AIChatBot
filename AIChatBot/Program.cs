@@ -86,6 +86,8 @@ try
     builder.Services.AddScoped<EmbeddingService>();
     builder.Services.AddScoped<RagService>();
     builder.Services.AddScoped<ChatService>();
+    builder.Services.AddScoped<EmbeddingMigrationService>();  // ✅ YENİ
+
 
     Log.Debug("[INIT] Repository ve servisler kaydedildi");
 

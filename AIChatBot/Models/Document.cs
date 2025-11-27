@@ -1,31 +1,15 @@
 ﻿// C:\DOSYALAR\AI.NET\AIChatBot\AIChatBot\Models\Document.cs
 namespace AIChatBot.Models
 {
-    /// <summary>
-    /// RAG için belge modeli
-    /// </summary>
     public class Document
     {
-        /// <summary>
-        /// Belge ID'si
-        /// </summary>
         public int Id { get; set; }
-
-        /// <summary>
-        /// Belge başlığı
-        /// Örnek: "Kargo Politikası"
-        /// </summary>
         public string Title { get; set; } = string.Empty;
-
-        /// <summary>
-        /// Belge içeriği
-        /// </summary>
         public string Content { get; set; } = string.Empty;
-
-        /// <summary>
-        /// Belgenin kategorisi
-        /// Örnek: "FAQ", "PolicyDocument", "ProductInfo"
-        /// </summary>
         public string Category { get; set; } = string.Empty;
-    }    
+        public string Tags { get; set; } = string.Empty;
+        public decimal? Price { get; set; }
+        public bool HasEmbedding { get; set; }  // ✅ Yeni property
+        public DateTime CreatedDate { get; set; }
+    }
 }

@@ -1,5 +1,4 @@
-﻿// C:\DOSYALAR\AI.NET\AIChatBot\AIChatBot\Services\EmbeddingService.cs
-using System.Net.Http.Json;
+﻿using System.Net.Http.Json;
 using System.Text.Json.Serialization;
 
 namespace AIChatBot.Services
@@ -38,8 +37,6 @@ namespace AIChatBot.Services
         /// <summary>
         /// Metni 768-boyutlu vektöre çevirir
         /// </summary>
-        /// <param name="text">Dönüştürülecek metin</param>
-        /// <returns>768-boyutlu float array (embedding vektörü)</returns>
         public async Task<float[]> GetEmbeddingAsync(string text)
         {
             if (string.IsNullOrWhiteSpace(text))
@@ -92,7 +89,7 @@ namespace AIChatBot.Services
                 }
 
                 _logger.LogInformation(
-                    "[EMBEDDING] ✅ Başarılı: {Dimension} boyut, Text: '{TextPreview}.. .'",
+                    "[EMBEDDING] ✅ Başarılı: {Dimension} boyut, Text: '{TextPreview}...'",
                     result.Embedding.Length,
                     text.Substring(0, Math.Min(50, text.Length))
                 );
@@ -121,11 +118,17 @@ namespace AIChatBot.Services
         }
 
         /// <summary>
+        /// Metin için embedding oluşturur (alias metod - Migration için)
+        /// </summary>
+        public async Task<float[]> CreateEmbeddingAsync(string text)
+        {
+            // ✅ Mevcut GetEmbeddingAsync'i çağır
+            return await GetEmbeddingAsync(text);
+        }
+
+        /// <summary>
         /// Birden fazla text için batch embedding (paralel)
         /// </summary>
-        /// <param name="texts">Text listesi</param>
-        /// <param name="maxParallelism">Maksimum paralel istek sayısı (varsayılan: 3)</param>
-        /// <returns>Embedding vektörleri listesi</returns>
         public async Task<List<float[]>> GetBatchEmbeddingsAsync(
             List<string> texts,
             int maxParallelism = 3)
@@ -183,7 +186,7 @@ namespace AIChatBot.Services
         {
             try
             {
-                _logger.LogDebug("[EMBEDDING-HEALTH] Health check başlatılıyor.. .");
+                _logger.LogDebug("[EMBEDDING-HEALTH] Health check başlatılıyor...");
 
                 var response = await _httpClient.GetAsync("/api/tags");
 

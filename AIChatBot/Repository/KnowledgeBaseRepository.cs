@@ -198,19 +198,18 @@ namespace AIChatBot.Repository.KnowledgeBase
 
         #region Document CRUD
 
+        // GetAllDocuments metodu ekle
         public async Task<List<Document>> GetAllDocuments()
         {
             var documents = new List<Document>();
 
             try
             {
-                _logger.LogInformation("[GET-ALL] Tüm belgeler istendi");
+                _logger.LogInformation("[REPO] Tüm belgeler getiriliyor...");
 
                 using (SqlConnection conn = new SqlConnection(_connectionString))
                 {
-                    using (SqlCommand cmd = new SqlCommand(
-                        "SELECT DocumentId, Title, Content, Category FROM dbo.KnowledgeBase WHERE IsActive = 1",
-                        conn))
+                    using (SqlCommand cmd = new SqlCommand("SELECT DocumentId, Title, Content, Category, Tags, Price, Embedding, CreatedDate FROM dbo.KnowledgeBase WHERE IsActive = 1", conn))
                     {
                         await conn.OpenAsync();
 
@@ -218,21 +217,114 @@ namespace AIChatBot.Repository.KnowledgeBase
                         {
                             while (await reader.ReadAsync())
                             {
-                                documents.Add(ReadDocumentFromReader(reader));
+                                var doc = new Document
+                                {
+                                    Id = reader.GetInt32(0),
+                                    Title = reader.GetString(1),
+                                    Content = reader.GetString(2),
+                                    Category = reader.IsDBNull(3) ? "" : reader.GetString(3),
+                                    Tags = reader.IsDBNull(4) ? "" : reader.GetString(4),
+                                    Price = reader.IsDBNull(5) ? (decimal?)null : reader.GetDecimal(5),
+                                    HasEmbedding = !reader.IsDBNull(6),  // ✅ Embedding var mı?
+                                    CreatedDate = reader.GetDateTime(7)
+                                };
+
+                                documents.Add(doc);
                             }
                         }
                     }
                 }
 
-                _logger.LogInformation("[GET-ALL] {Count} belge bulundu", documents.Count);
+                _logger.LogInformation("[REPO] {Count} belge getirildi", documents.Count);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "[GET-ALL-ERROR]");
+                _logger.LogError(ex, "[REPO-ERROR] GetAllDocuments hatası");
                 throw;
             }
 
             return documents;
+        }
+
+        // GetDocumentById metodu ekle
+        public async Task<Document?> GetDocumentById(int documentId)
+        {
+            try
+            {
+                using (SqlConnection conn = new SqlConnection(_connectionString))
+                {
+                    using (SqlCommand cmd = new SqlCommand("sp_KnowledgeBase_GetById", conn))
+                    {
+                        cmd.CommandType = CommandType.StoredProcedure;
+                        cmd.Parameters.Add(new SqlParameter("@DocumentId", documentId));
+
+                        await conn.OpenAsync();
+
+                        using (SqlDataReader reader = await cmd.ExecuteReaderAsync())
+                        {
+                            if (await reader.ReadAsync())
+                            {
+                                return new Document
+                                {
+                                    Id = reader.GetInt32(reader.GetOrdinal("DocumentId")),
+                                    Title = reader.GetString(reader.GetOrdinal("Title")),
+                                    Content = reader.GetString(reader.GetOrdinal("Content")),
+                                    Category = reader.IsDBNull(reader.GetOrdinal("Category"))
+                                        ? ""
+                                        : reader.GetString(reader.GetOrdinal("Category")),
+                                    Tags = reader.IsDBNull(reader.GetOrdinal("Tags"))
+                                        ? ""
+                                        : reader.GetString(reader.GetOrdinal("Tags")),
+                                    Price = reader.IsDBNull(reader.GetOrdinal("Price"))
+                                        ? (decimal?)null
+                                        : reader.GetDecimal(reader.GetOrdinal("Price"))
+                                };
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[REPO-ERROR] GetDocumentById: {DocumentId}", documentId);
+                throw;
+            }
+
+            return null;
+        }
+
+        // UpdateEmbedding metodu ekle
+        public async Task<bool> UpdateEmbedding(int documentId, string embeddingJson)
+        {
+            try
+            {
+                _logger.LogDebug("[REPO] DocumentId:{DocumentId} embedding güncelleniyor...", documentId);
+
+                using (SqlConnection conn = new SqlConnection(_connectionString))
+                {
+                    using (SqlCommand cmd = new SqlCommand("sp_KnowledgeBase_UpdateEmbedding", conn))
+                    {
+                        cmd.CommandType = CommandType.StoredProcedure;
+                        cmd.Parameters.Add(new SqlParameter("@DocumentId", documentId));
+                        cmd.Parameters.Add(new SqlParameter("@Embedding", SqlDbType.NVarChar)
+                        {
+                            Value = embeddingJson
+                        });
+
+                        await conn.OpenAsync();
+                        var rowsAffected = await cmd.ExecuteNonQueryAsync();
+
+                        _logger.LogDebug("[REPO] DocumentId:{DocumentId} - {Rows} satır güncellendi", documentId, rowsAffected);
+
+                        return rowsAffected > 0;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[REPO-ERROR] UpdateEmbedding: DocumentId:{DocumentId}", documentId);
+                throw;
+            }
         }
 
         public async Task<Document?> GetDocumentByIdAsync(int documentId)
