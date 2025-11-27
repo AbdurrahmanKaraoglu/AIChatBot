@@ -1,4 +1,4 @@
-﻿// Controllers/ToolTestController.cs
+﻿// C:\DOSYALAR\AI.NET\AIChatBot\AIChatBot\Controllers\ToolTestController.cs
 
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.AI;

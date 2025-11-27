@@ -1,4 +1,5 @@
-﻿using AIChatBot.Models;
+﻿// C:\DOSYALAR\AI.NET\AIChatBot\AIChatBot\Repository\KnowledgeBaseRepository.cs
+using AIChatBot.Models;
 using System.Data;
 using Microsoft.Data.SqlClient;
 

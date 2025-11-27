@@ -1,4 +1,4 @@
-﻿// Models/ToolContext.cs
+﻿// C:\DOSYALAR\AI.NET\AIChatBot\AIChatBot\Models\ToolContext.cs
 namespace AIChatBot.Models
 {
     public class ToolContext

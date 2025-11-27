@@ -1,4 +1,5 @@
-﻿using AIChatBot.Models;
+﻿// C:\DOSYALAR\AI.NET\AIChatBot\AIChatBot\Services\ChatService.cs
+using AIChatBot.Models;
 using AIChatBot.Repository.ChatMemory;
 using Microsoft.Extensions.AI;
 

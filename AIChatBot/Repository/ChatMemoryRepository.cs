@@ -1,4 +1,5 @@
-﻿using Microsoft.Data.SqlClient;  // ✅ System.Data.SqlClient → Microsoft.Data.SqlClient
+﻿// C:\DOSYALAR\AI.NET\AIChatBot\AIChatBot\Repository\ChatMemoryRepository.cs
+using Microsoft.Data.SqlClient;  // ✅ System.Data.SqlClient → Microsoft.Data.SqlClient
 using Microsoft.Extensions.AI;
 using System.Data;
 

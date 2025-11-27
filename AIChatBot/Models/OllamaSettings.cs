@@ -1,4 +1,5 @@
-﻿namespace AIChatBot.Models
+﻿// C:\DOSYALAR\AI.NET\AIChatBot\AIChatBot\Models\OllamaSettings.cs
+namespace AIChatBot.Models
 {
     /// <summary>
     /// Ollama yapılandırma ayarları

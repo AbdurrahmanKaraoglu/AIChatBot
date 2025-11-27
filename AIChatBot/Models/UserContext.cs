@@ -1,4 +1,5 @@
-﻿namespace AIChatBot.Models
+﻿// C:\DOSYALAR\AI.NET\AIChatBot\AIChatBot\Models\UserContext.cs
+namespace AIChatBot.Models
 {
     /// <summary>
     /// Kullanıcının yetki bilgileri

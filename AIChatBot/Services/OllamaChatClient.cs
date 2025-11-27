@@ -1,4 +1,5 @@
-﻿using AIChatBot.Models;
+﻿// C:\DOSYALAR\AI.NET\AIChatBot\AIChatBot\Services\OllamaChatClient.cs
+using AIChatBot.Models;
 using Microsoft.Extensions.AI;
 using System.Runtime.CompilerServices;
 using System.Text.Json;

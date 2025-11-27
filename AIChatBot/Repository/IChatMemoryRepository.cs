@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.AI;
+﻿// C:\DOSYALAR\AI.NET\AIChatBot\AIChatBot\Repository\IChatMemoryRepository.cs
+using Microsoft.Extensions.AI;
 
 namespace AIChatBot.Repository.ChatMemory
 {

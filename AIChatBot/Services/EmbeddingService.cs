@@ -1,4 +1,5 @@
-﻿using System.Net.Http.Json;
+﻿// C:\DOSYALAR\AI.NET\AIChatBot\AIChatBot\Services\EmbeddingService.cs
+using System.Net.Http.Json;
 using System.Text.Json.Serialization;
 
 namespace AIChatBot.Services

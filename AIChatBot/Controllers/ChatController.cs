@@ -1,4 +1,5 @@
-﻿using AIChatBot.Models;
+﻿// C:\DOSYALAR\AI.NET\AIChatBot\AIChatBot\Controllers\ChatController.cs
+using AIChatBot.Models;
 using AIChatBot.Repository.KnowledgeBase;
 using AIChatBot.Services;
 using Microsoft.AspNetCore.Mvc;

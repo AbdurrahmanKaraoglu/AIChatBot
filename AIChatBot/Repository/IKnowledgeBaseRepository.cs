@@ -1,4 +1,5 @@
-﻿using AIChatBot.Models;
+﻿// C:\DOSYALAR\AI.NET\AIChatBot\AIChatBot\Repository\IKnowledgeBaseRepository.cs
+using AIChatBot.Models;
 
 namespace AIChatBot.Repository.KnowledgeBase
 {

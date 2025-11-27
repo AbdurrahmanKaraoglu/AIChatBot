@@ -1,4 +1,6 @@
-﻿using System.Text.Json.Serialization;
+﻿//C:\DOSYALAR\AI.NET\AIChatBot\AIChatBot\Models\ChatRequest.cs
+
+using System.Text.Json.Serialization;
 
 namespace AIChatBot.Models
 {

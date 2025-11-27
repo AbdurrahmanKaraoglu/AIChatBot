@@ -1,4 +1,5 @@
-﻿namespace AIChatBot.Models
+﻿// C:\DOSYALAR\AI.NET\AIChatBot\AIChatBot\Models\Document.cs
+namespace AIChatBot.Models
 {
     /// <summary>
     /// RAG için belge modeli

@@ -1,4 +1,5 @@
-﻿using AIChatBot.Models;
+﻿// C:\DOSYALAR\AI.NET\AIChatBot\AIChatBot\Services\RagService.cs
+using AIChatBot.Models;
 using AIChatBot.Repository.KnowledgeBase;
 
 namespace AIChatBot.Services

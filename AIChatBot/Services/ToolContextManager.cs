@@ -1,4 +1,4 @@
-﻿// Services/ToolContextManager.cs
+﻿// C:\DOSYALAR\AI.NET\AIChatBot\AIChatBot\Services\ToolContextManager.cs
 using AIChatBot.Models;
 
 namespace AIChatBot.Services

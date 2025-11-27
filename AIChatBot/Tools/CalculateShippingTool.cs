@@ -1,4 +1,4 @@
-﻿// Tools/CalculateShippingTool. cs
+﻿// C:\DOSYALAR\AI.NET\AIChatBot\AIChatBot\Tools\CalculateShippingTool.cs
 using Microsoft.Data.SqlClient;
 using System.ComponentModel;
 using System.Data;

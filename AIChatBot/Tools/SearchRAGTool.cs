@@ -1,4 +1,4 @@
-﻿// Tools/SearchRAGTool.cs
+﻿// C:\DOSYALAR\AI.NET\AIChatBot\AIChatBot\Tools\SearchRAGTool.cs
 using AIChatBot.Services;
 using System.ComponentModel;
 

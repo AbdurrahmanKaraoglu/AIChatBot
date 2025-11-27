@@ -1,4 +1,4 @@
-﻿// Tools/GetProductInfoTool.cs
+﻿// C:\DOSYALAR\AI.NET\AIChatBot\AIChatBot\Tools\GetProductInfoTool.cs
 using AIChatBot.Repository.KnowledgeBase;
 using System.ComponentModel;
 
