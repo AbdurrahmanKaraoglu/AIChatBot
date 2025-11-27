@@ -1,5 +1,5 @@
-﻿// C:\DOSYALAR\AI.NET\AIChatBot\AIChatBot\Tools\SearchRAGTool.cs
-using AIChatBot.Services;
+﻿using AIChatBot.Services;
+using AIChatBot.Models;
 using System.ComponentModel;
 
 namespace AIChatBot.Tools
@@ -20,20 +20,71 @@ namespace AIChatBot.Tools
             [Description("Arama sorgusu")] string query,
             [Description("Kaç sonuç dönsün (varsayılan 3)")] int topK = 3)
         {
-            _logger.LogInformation($"[TOOL] SearchRAG called: Query='{query}', TopK={topK}");
+            _logger.LogInformation("[TOOL] SearchRAG called: Query='{Query}', TopK={TopK}", query, topK);
 
-            var results = await _ragService.SemanticSearchAsync(query, topK);
-
-            if (!results.Any())
-                return "İlgili bilgi bulunamadı.";
-
-            var response = "Bulunan Bilgiler:\n";
-            foreach (var doc in results)
+            // ✅ RBAC: Context'i al (opsiyonel - RAG herkese açık)
+            ToolContext? context = null;
+            try
             {
-                response += $"\n• {doc.Title}: {doc.Content.Substring(0, Math.Min(100, doc.Content.Length))}.. .\n";
+                context = ToolContextManager.GetContext();
+
+                _logger.LogInformation(
+                    "[RBAC] User:{UserId}, Role:{Role} searching: '{Query}'",
+                    context.UserId,
+                    context.Role,
+                    query
+                );
+            }
+            catch (InvalidOperationException)
+            {
+                _logger.LogWarning("[RBAC] ToolContext bulunamadı, anonim arama yapılıyor");
+                // RAG arama herkese açık, context yoksa devam et
             }
 
-            return response;
+            // ✅ RBAC: Rol bazlı kısıtlama (isteğe bağlı)
+            // Örnek: Customer'lar günde max 100 arama yapabilir (DB'de sayaç tutulmalı)
+            if (context != null && context.Role == "Customer")
+            {
+                // TODO: Rate limiting kontrolü (günlük arama sayısı)
+                _logger.LogDebug(
+                    "[RBAC] Customer UserId:{UserId} performing search (rate limiting: TODO)",
+                    context.UserId
+                );
+            }
+
+            // ✅ RAG arama
+            try
+            {
+                var results = await _ragService.SemanticSearchAsync(query, topK);
+
+                if (!results.Any())
+                {
+                    _logger.LogWarning("[TOOL] SearchRAG: No results for query '{Query}'", query);
+                    return "❌ İlgili bilgi bulunamadı.";
+                }
+
+                _logger.LogInformation("[TOOL] SearchRAG: {Count} results found", results.Count);
+
+                var response = "✅ Bulunan Bilgiler:\n\n";
+                int index = 1;
+
+                foreach (var doc in results)
+                {
+                    var preview = doc.Content.Length > 100
+                        ? doc.Content.Substring(0, 100) + "..."
+                        : doc.Content;
+
+                    response += $"{index}.  📄 **{doc.Title}**\n   {preview}\n\n";
+                    index++;
+                }
+
+                return response;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[TOOL-ERROR] SearchRAG hatası: Query='{Query}'", query);
+                return $"❌ Arama hatası: {ex.Message}";
+            }
         }
     }
 }

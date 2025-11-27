@@ -1,9 +1,7 @@
-﻿// C:\DOSYALAR\AI.NET\AIChatBot\AIChatBot\Controllers\ChatController.cs
-using AIChatBot.Models;
+﻿using AIChatBot.Models;
 using AIChatBot.Repository.KnowledgeBase;
 using AIChatBot.Services;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.AI;
 
 namespace AIChatBot.Controllers
 {
@@ -14,34 +12,51 @@ namespace AIChatBot.Controllers
         private readonly ChatService _chatService;
         private readonly RagService _rag;
         private readonly IKnowledgeBaseRepository _knowledgeBaseRepository;
+        private readonly ILogger<ChatController> _logger;
 
-        public ChatController(ChatService chatService, RagService rag, IKnowledgeBaseRepository knowledgeBaseRepository)
+        public ChatController(
+            ChatService chatService,
+            RagService rag,
+            IKnowledgeBaseRepository knowledgeBaseRepository,
+            ILogger<ChatController> logger)
         {
             _chatService = chatService;
             _rag = rag;
             _knowledgeBaseRepository = knowledgeBaseRepository;
+            _logger = logger;
         }
 
         [HttpPost("message")]
         public async Task<ActionResult<Models.ChatResponse>> SendMessage([FromBody] ChatRequest request)
         {
             if (string.IsNullOrWhiteSpace(request.Message) || string.IsNullOrWhiteSpace(request.SessionId))
+            {
                 return BadRequest(new { error = "Mesaj ve SessionId zorunludur" });
+            }
 
+            // ✅ RBAC: UserContext oluştur (Role bilgisi ile)
             var userContext = new UserContext
             {
-                UserId = request.UserId ?? "anon",
-                UserName = "Ziyaretçi"
+                UserId = request.UserId ?? "anonymous",
+                UserName = "Ziyaretçi",
+                Role = request.Role ?? "Customer"  // ✅ Role eklendi
             };
 
+            _logger.LogInformation(
+                "[CONTROLLER] Message received: SessionId={SessionId}, UserId={UserId}, Role={Role}",
+                request.SessionId,
+                userContext.UserId,
+                userContext.Role
+            );
+
             var response = await _chatService.ProcessMessageAsync(request, userContext);
+
             return response.Success ? Ok(response) : StatusCode(500, response);
         }
 
         [HttpGet("history")]
         public async Task<ActionResult> GetHistory([FromQuery] string sessionId)
         {
-            // ✅ Async metod kullan
             var history = await _chatService.GetSessionHistoryAsync(sessionId);
 
             var formatted = history.Select(m => new
@@ -56,20 +71,17 @@ namespace AIChatBot.Controllers
         [HttpDelete("clear")]
         public async Task<ActionResult> ClearSession([FromQuery] string sessionId)
         {
-            // ✅ Async metod kullan
             await _chatService.ClearSessionAsync(sessionId);
-            return Ok(new { message = "Temizlendi" });
+            return Ok(new { message = "Session temizlendi" });
         }
 
         [HttpGet("search")]
         public async Task<ActionResult> SearchDocs([FromQuery] string query)
         {
-            // ✅ Async metod kullan
             var documents = await _rag.SearchDocumentsAsync(query ?? "");
             return Ok(documents);
         }
 
-        // ✅ YENİ ENDPOINT
         [HttpPost("smart-search")]
         public async Task<ActionResult> SmartProductSearch([FromBody] SmartSearchRequest request)
         {
@@ -98,7 +110,6 @@ namespace AIChatBot.Controllers
         }
     }
 
-    // ✅ YENİ MODEL
     public class SmartSearchRequest
     {
         public string Query { get; set; } = string.Empty;

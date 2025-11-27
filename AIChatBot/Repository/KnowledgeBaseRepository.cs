@@ -119,9 +119,9 @@ namespace AIChatBot.Repository.KnowledgeBase
         /// Vector-based semantic search (SQL Server 2025 VECTOR_DISTANCE)
         /// </summary>
         public async Task<List<(Document Doc, float Similarity)>> VectorSearchAsync(
-            float[] queryVector,
-            int topK = 5,
-            float minSimilarity = 0.5f)
+       float[] queryVector,
+       int topK = 5,
+       float minSimilarity = 0.5f)
         {
             var results = new List<(Document, float)>();
 
@@ -141,12 +141,15 @@ namespace AIChatBot.Repository.KnowledgeBase
                     {
                         cmd.CommandType = CommandType.StoredProcedure;
 
-                        // ✅ SQL Server 2025: VECTOR parametresi (JSON string olarak)
-                        var vectorJson = "[" + string.Join(",", queryVector.Select(v => v.ToString("F6"))) + "]";
+                        // ✅ DÜZELTME: Sadece JSON string gönder (CAST SQL'de yapılacak)
+                        var vectorJson = "[" + string.Join(",", queryVector.Select(v => v.ToString("G", System.Globalization.CultureInfo.InvariantCulture))) + "]";
 
+                        _logger.LogDebug("[VECTOR-SEARCH] Vector JSON length: {Length}", vectorJson.Length);
+
+                        // ✅ Sadece JSON string olarak gönder
                         cmd.Parameters.Add(new SqlParameter("@QueryVector", SqlDbType.NVarChar)
                         {
-                            Value = vectorJson
+                            Value = vectorJson  // CAST yok! 
                         });
                         cmd.Parameters.Add(new SqlParameter("@TopK", SqlDbType.Int) { Value = topK });
                         cmd.Parameters.Add(new SqlParameter("@MinSimilarity", SqlDbType.Float) { Value = minSimilarity });

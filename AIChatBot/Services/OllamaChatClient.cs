@@ -1,5 +1,4 @@
-﻿// C:\DOSYALAR\AI.NET\AIChatBot\AIChatBot\Services\OllamaChatClient.cs
-using AIChatBot.Models;
+﻿using AIChatBot.Models;
 using Microsoft.Extensions.AI;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
@@ -15,13 +14,11 @@ namespace AIChatBot.Services
 
         public ChatClientMetadata Metadata { get; }
 
-        // Constructor 1: 2 parametre
         public OllamaChatClient(string endpoint, string modelId)
             : this(endpoint, modelId, new OllamaSettings())
         {
         }
 
-        // Constructor 2: 3 parametre
         public OllamaChatClient(string endpoint, string modelId, OllamaSettings settings)
         {
             _modelId = modelId;
@@ -36,13 +33,12 @@ namespace AIChatBot.Services
             Metadata = new ChatClientMetadata("Ollama", new Uri(endpoint), modelId);
         }
 
-        // ✅ Return type: Microsoft.Extensions.AI.ChatResponse (TAM NAMESPACE)
         public async Task<Microsoft.Extensions.AI.ChatResponse> GetResponseAsync(
             IEnumerable<ChatMessage> chatMessages,
             ChatOptions? options = null,
             CancellationToken cancellationToken = default)
         {
-            var request = BuildRequest(chatMessages, stream: false);
+            var request = BuildRequest(chatMessages, options, stream: false);
 
             var response = await _httpClient.PostAsJsonAsync("/api/chat", request, cancellationToken);
             response.EnsureSuccessStatusCode();
@@ -51,7 +47,6 @@ namespace AIChatBot.Services
 
             var assistantMessage = new ChatMessage(ChatRole.Assistant, ollamaResponse?.Message?.Content ?? "");
 
-            // ✅ Microsoft.Extensions.AI.ChatResponse döndür
             return new Microsoft.Extensions.AI.ChatResponse(assistantMessage);
         }
 
@@ -60,29 +55,67 @@ namespace AIChatBot.Services
             ChatOptions? options = null,
             [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
-            var request = BuildRequest(chatMessages, stream: true);
-            var jsonContent = JsonSerializer.Serialize(request);
+            var request = BuildRequest(chatMessages, options, stream: true);
+            var jsonContent = JsonSerializer.Serialize(request, new JsonSerializerOptions { WriteIndented = true });
+
+            // ✅ Debug logging
+            Console.WriteLine("========================================");
+            Console.WriteLine("[OLLAMA-REQUEST] /api/chat");
+            Console.WriteLine(jsonContent);
+            Console.WriteLine("========================================");
+
             var requestContent = new StringContent(jsonContent, System.Text.Encoding.UTF8, "application/json");
 
             using var httpRequest = new HttpRequestMessage(HttpMethod.Post, "/api/chat") { Content = requestContent };
-            using var response = await _httpClient.SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
 
-            response.EnsureSuccessStatusCode();
-
-            using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-            using var reader = new StreamReader(stream);
-
-            string? line;
-            while ((line = await reader.ReadLineAsync(cancellationToken)) != null)
+            // ✅ DÜZELTME: try-catch dışında response al
+            HttpResponseMessage response;
+            try
             {
-                if (string.IsNullOrWhiteSpace(line)) continue;
+                response = await _httpClient.SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
 
-                OllamaResponse? chunk = null;
-                try { chunk = JsonSerializer.Deserialize<OllamaResponse>(line); } catch { }
+                Console.WriteLine($"[OLLAMA-RESPONSE] Status: {response.StatusCode}");
 
-                if (chunk?.Message?.Content != null)
+                if (!response.IsSuccessStatusCode)
                 {
-                    yield return new ChatResponseUpdate(ChatRole.Assistant, chunk.Message.Content);
+                    var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+                    Console.WriteLine($"[OLLAMA-ERROR-BODY] {errorBody}");
+                    response.EnsureSuccessStatusCode();
+                }
+            }
+            catch (HttpRequestException ex)
+            {
+                Console.WriteLine($"[OLLAMA-HTTP-ERROR] {ex.Message}");
+                throw;
+            }
+
+            // ✅ yield return try-catch dışında
+            using (response)
+            {
+                using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+                using var reader = new StreamReader(stream);
+
+                string? line;
+                while ((line = await reader.ReadLineAsync(cancellationToken)) != null)
+                {
+                    if (string.IsNullOrWhiteSpace(line)) continue;
+
+                    OllamaResponse? chunk = null;
+                    try
+                    {
+                        chunk = JsonSerializer.Deserialize<OllamaResponse>(line);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[OLLAMA-PARSE-ERROR] {ex.Message}");
+                        Console.WriteLine($"[OLLAMA-RAW-LINE] {line}");
+                        continue;
+                    }
+
+                    if (chunk?.Message?.Content != null)
+                    {
+                        yield return new ChatResponseUpdate(ChatRole.Assistant, chunk.Message.Content);
+                    }
                 }
             }
         }
@@ -92,9 +125,13 @@ namespace AIChatBot.Services
 
         public void Dispose() => _httpClient.Dispose();
 
-        private OllamaRequest BuildRequest(IEnumerable<ChatMessage> chatMessages, bool stream)
+        // ✅ Ollama'nın beklediği format
+        private OllamaRequest BuildRequest(
+            IEnumerable<ChatMessage> chatMessages,
+            ChatOptions? options,
+            bool stream)
         {
-            return new OllamaRequest
+            var request = new OllamaRequest
             {
                 Model = _modelId,
                 Stream = stream,
@@ -102,42 +139,64 @@ namespace AIChatBot.Services
                 {
                     Role = m.Role.Value?.ToLower() ?? "user",
                     Content = m.Text ?? ""
-                }).ToList(),
-                Options = new OllamaOptions
-                {
-                    Temperature = _settings.Temperature,
-                    TopP = _settings.TopP,
-                    RepeatPenalty = _settings.RepeatPenalty
-                }
+                }).ToList()
             };
+
+            // ✅ Options sadece gerekli alanlarla
+            if (options != null)
+            {
+                request.Options = new OllamaOptions
+                {
+                    Temperature = (float)(options.Temperature ?? _settings.Temperature),
+                    TopP = (float)(options.TopP ?? _settings.TopP)
+                };
+            }
+
+            return request;
         }
 
         // --- INTERNAL DTOs ---
         private class OllamaRequest
         {
-            [JsonPropertyName("model")] public string Model { get; set; } = "";
-            [JsonPropertyName("messages")] public List<OllamaMessage> Messages { get; set; } = new();
-            [JsonPropertyName("stream")] public bool Stream { get; set; }
-            [JsonPropertyName("options")] public OllamaOptions? Options { get; set; }
+            [JsonPropertyName("model")]
+            public string Model { get; set; } = "";
+
+            [JsonPropertyName("messages")]
+            public List<OllamaMessage> Messages { get; set; } = new();
+
+            [JsonPropertyName("stream")]
+            public bool Stream { get; set; }
+
+            [JsonPropertyName("options")]
+            [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+            public OllamaOptions? Options { get; set; }
         }
 
         private class OllamaOptions
         {
-            [JsonPropertyName("temperature")] public double Temperature { get; set; }
-            [JsonPropertyName("top_p")] public double TopP { get; set; }
-            [JsonPropertyName("repeat_penalty")] public double RepeatPenalty { get; set; }
+            [JsonPropertyName("temperature")]
+            public float Temperature { get; set; }
+
+            [JsonPropertyName("top_p")]
+            public float TopP { get; set; }
         }
 
         private class OllamaMessage
         {
-            [JsonPropertyName("role")] public string Role { get; set; } = "";
-            [JsonPropertyName("content")] public string Content { get; set; } = "";
+            [JsonPropertyName("role")]
+            public string Role { get; set; } = "";
+
+            [JsonPropertyName("content")]
+            public string Content { get; set; } = "";
         }
 
         private class OllamaResponse
         {
-            [JsonPropertyName("message")] public OllamaMessage? Message { get; set; }
-            [JsonPropertyName("done")] public bool Done { get; set; }
+            [JsonPropertyName("message")]
+            public OllamaMessage? Message { get; set; }
+
+            [JsonPropertyName("done")]
+            public bool Done { get; set; }
         }
     }
 }

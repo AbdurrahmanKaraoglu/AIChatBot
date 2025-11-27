@@ -1,5 +1,4 @@
-﻿// C:\DOSYALAR\AI.NET\AIChatBot\AIChatBot\Services\ChatService.cs
-using AIChatBot.Models;
+﻿using AIChatBot.Models;
 using AIChatBot.Repository.ChatMemory;
 using Microsoft.Extensions.AI;
 
@@ -10,14 +9,14 @@ namespace AIChatBot.Services
         private readonly IChatClient _chatClient;
         private readonly IChatMemoryRepository _memoryRepository;
         private readonly RagService _rag;
-        private readonly IEnumerable<AITool> _tools;  // ✅ AIFunction → AITool
+        private readonly IEnumerable<AITool> _tools;
         private readonly ILogger<ChatService> _logger;
 
         public ChatService(
             IChatClient chatClient,
             IChatMemoryRepository memoryRepository,
             RagService rag,
-            IEnumerable<AITool> tools,  // ✅ AIFunction → AITool
+            IEnumerable<AITool> tools,
             ILogger<ChatService> logger)
         {
             _chatClient = chatClient;
@@ -33,17 +32,20 @@ namespace AIChatBot.Services
         {
             try
             {
+                // RBAC: Tool context'i set et
+                SetToolContext(request, userContext);
+
                 _logger.LogInformation(
-                    "[CHAT] Session:{SessionId}, User:{UserId}, Message:{Message}",
+                    "[CHAT] Session:{SessionId}, User:{UserId}, Role:{Role}, Message:{Message}",
                     request.SessionId,
                     userContext.UserId,
+                    request.Role,
                     request.Message
                 );
 
                 // 1. RAG - Semantic search
                 var relevantDocs = await _rag.SemanticSearchAsync(request.Message, topK: 3);
 
-                // Fallback: Keyword search (vector search boş dönerse)
                 if (!relevantDocs.Any())
                 {
                     _logger.LogWarning("[RAG] Vector search boş, keyword search deneniyor.. .");
@@ -51,28 +53,28 @@ namespace AIChatBot.Services
                 }
 
                 var ragContext = _rag.FormatDocumentsAsContext(relevantDocs);
-
                 _logger.LogInformation("[RAG] {Count} belge bulundu", relevantDocs.Count);
 
                 // 2. System prompt oluştur
                 var systemPrompt = BuildSystemPrompt(userContext, ragContext);
 
-                // 3.  Geçmişi al (System mesajları hariç)
+                // 3.  Geçmişi al
                 var messages = await _memoryRepository.GetHistoryAsync(request.SessionId);
                 messages = messages.Where(m => m.Role != ChatRole.System).ToList();
 
-                // 4. System prompt'u ekle
+                // 4. System prompt ekle
                 messages.Insert(0, new ChatMessage(ChatRole.System, systemPrompt));
 
                 // 5.  Kullanıcı mesajını ekle
                 messages.Add(new ChatMessage(ChatRole.User, request.Message));
 
-                // ✅ 6. ChatOptions ile tool'ları ekle (AITool listesi)
+                // 6. ChatOptions
                 var chatOptions = new ChatOptions
                 {
-                    Tools = _tools?.ToList(),  // ✅ IEnumerable<AITool> → List<AITool>
+                    //Tools = _tools?.ToList(),
                     Temperature = 0.3f,
-                    TopP = 0.9f
+                    TopP = 0.9f,
+                    MaxOutputTokens = 2000
                 };
 
                 _logger.LogInformation(
@@ -80,37 +82,83 @@ namespace AIChatBot.Services
                     chatOptions.Tools?.Count ?? 0
                 );
 
-                // ✅ 7. LLM'den streaming cevap al
+                // ✅ 7. Tool calling loop (STREAMING)
                 var responseText = "";
                 var usedTools = new List<string>();
+                var conversationMessages = messages.ToList();
 
-                await foreach (var update in _chatClient
-                    .GetStreamingResponseAsync(messages, chatOptions)
-                    .ConfigureAwait(false))
+                const int maxIterations = 5;
+                int iteration = 0;
+
+                while (iteration < maxIterations)
                 {
-                    // Tool çağrısı yapıldıysa logla
-                    if (update.Contents?.Any(c => c is FunctionCallContent) == true)
-                    {
-                        foreach (var content in update.Contents.OfType<FunctionCallContent>())
-                        {
-                            _logger.LogInformation(
-                                "[TOOL-CALL] {ToolName}",
-                                content.Name
-                            );
+                    iteration++;
+                    _logger.LogDebug("[LLM] Iteration {Iteration}/{Max}", iteration, maxIterations);
 
-                            if (!string.IsNullOrEmpty(content.Name) && !usedTools.Contains(content.Name))
-                                usedTools.Add(content.Name);
+                    ChatMessage? assistantMessage = null;
+                    var currentText = "";
+                    var hasToolCall = false;
+
+                    await foreach (var update in _chatClient.GetStreamingResponseAsync(conversationMessages, chatOptions))
+                    {
+                        // Text topla
+                        if (!string.IsNullOrEmpty(update.Text))
+                        {
+                            currentText += update.Text;
+                        }
+
+                        // Tool çağrısı var mı?
+                        var functionCalls = update.Contents
+                            ?.OfType<FunctionCallContent>()
+                            .ToList() ?? new List<FunctionCallContent>();
+
+                        if (functionCalls.Any())
+                        {
+                            hasToolCall = true;
+
+                            foreach (var functionCall in functionCalls)
+                            {
+                                _logger.LogInformation(
+                                    "[TOOL-CALL] Tool: {ToolName}, CallId: {CallId}",
+                                    functionCall.Name,
+                                    functionCall.CallId
+                                );
+
+                                if (!string.IsNullOrEmpty(functionCall.Name))
+                                {
+                                    if (!usedTools.Contains(functionCall.Name))
+                                        usedTools.Add(functionCall.Name);
+                                }
+                            }
+
+                            // Tool çağrısını conversation'a ekle
+                            assistantMessage = new ChatMessage(ChatRole.Assistant, update.Contents?.ToList() ?? new List<AIContent>());
+                            conversationMessages.Add(assistantMessage);
                         }
                     }
 
-                    // Metin yanıtı biriktir
-                    if (!string.IsNullOrEmpty(update.Text))
-                        responseText += update.Text;
+                    // Tool çağrısı yapıldıysa bir sonraki iterasyona geç
+                    if (hasToolCall)
+                    {
+                        _logger.LogDebug("[LLM] Tool call detected, next iteration");
+                        continue;
+                    }
+
+                    // Tool çağrısı yok, final cevap
+                    responseText = currentText;
+                    _logger.LogInformation("[LLM] Final cevap alındı: {Length} karakter", responseText.Length);
+                    break;
                 }
 
-                _logger.LogInformation("[LLM] Cevap alındı: {ResponseLength} karakter", responseText.Length);
+                if (iteration >= maxIterations)
+                {
+                    _logger.LogWarning("[LLM] Max iteration limit reached");
+                    responseText = responseText.Length > 0
+                        ? responseText
+                        : "Üzgünüm, isteğinizi tamamlayamadım. Lütfen tekrar deneyin.";
+                }
 
-                // 8. Mesajları veritabanına kaydet
+                // 8. Mesajları kaydet
                 await SaveMessagesAsync(request, userContext, responseText);
 
                 return new AIChatBot.Models.ChatResponse
@@ -119,6 +167,22 @@ namespace AIChatBot.Services
                     Answer = responseText,
                     Success = true,
                     UsedTools = usedTools
+                };
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                _logger.LogWarning(
+                    "[RBAC-DENIED] User:{UserId}, Role:{Role}, Error:{Error}",
+                    userContext.UserId,
+                    request.Role,
+                    ex.Message
+                );
+
+                return new AIChatBot.Models.ChatResponse
+                {
+                    SessionId = request.SessionId,
+                    Success = false,
+                    ErrorMessage = $"⛔ Yetkilendirme Hatası: {ex.Message}"
                 };
             }
             catch (Exception ex)
@@ -137,6 +201,45 @@ namespace AIChatBot.Services
                     ErrorMessage = $"Sistem Hatası: {ex.Message}"
                 };
             }
+            finally
+            {
+                ClearToolContext();
+            }
+        }
+
+        private void SetToolContext(ChatRequest request, UserContext userContext)
+        {
+            if (string.IsNullOrEmpty(userContext.UserId))
+            {
+                _logger.LogWarning("[RBAC] UserId boş, context set edilmedi");
+                return;
+            }
+
+            var context = new ToolContext
+            {
+                UserId = int.TryParse(userContext.UserId, out var uid) ? uid : 0,
+                Role = request.Role ?? "Customer",
+                AllowedProductIds = request.AllowedProductIds ?? new List<int>()
+            };
+
+            ToolContextManager.SetContext(context);
+
+            _logger.LogInformation(
+                "[RBAC-CONTEXT] UserId:{UserId}, Role:{Role}, AllowedProducts:[{Products}]",
+                context.UserId,
+                context.Role,
+                string.Join(", ", context.AllowedProductIds)
+            );
+        }
+
+        private void ClearToolContext()
+        {
+            try
+            {
+                ToolContextManager.ClearContext();
+                _logger.LogDebug("[RBAC-CONTEXT] Context temizlendi");
+            }
+            catch { }
         }
 
         private string BuildSystemPrompt(UserContext userContext, string ragContext)
@@ -145,9 +248,14 @@ namespace AIChatBot.Services
 
 KURALLAR:
 1.  SADECE bilgi bankasındaki bilgileri kullan
-2. Bilmediğin şeyi ASLA uydurma
+2.  Bilmediğin şeyi ASLA uydurma
 3. Türkçe konuş
 4. Yardımcı ve profesyonel ol
+
+⚠️ TOOL KULLANIMI:
+- Ürün bilgisi gerekiyorsa GetProductInfo tool'unu kullan
+- Kargo hesabı gerekiyorsa CalculateShipping tool'unu kullan
+- Döküman araması gerekiyorsa SearchRAG tool'unu kullan
 
 ⚠️ ÖNEMLİ FİYAT KURALI:
 - Eğer kullanıcı 'kampanya', 'indirim', 'kış' kelimesini kullanıyorsa:
