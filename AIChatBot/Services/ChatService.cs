@@ -69,50 +69,16 @@ namespace AIChatBot.Services
                     // ✅ TOOL BAŞARIYLA ÇALIŞTI
                     usedTools.Add(toolName!);
 
-                    _logger.LogInformation("[MANUAL-TOOL] ✅ Tool başarıyla çalıştı: {ToolName}", toolName);
+                    _logger.LogInformation("[MANUAL-TOOL] ✅ Tool başarıyla çalıştı:  {ToolName}", toolName);
 
-                    // Tool sonucunu doğrudan LLM'e gönder (formatlama için)
-                    var messages = new List<ChatMessage>
-                    {
-                        new ChatMessage(ChatRole.System, $@"
-Sen bir müşteri hizmetleri asistanısın.  Aşağıdaki tool sonucunu kullanıcıya düzgün bir şekilde sun:
+                    // ✅ Tool sonucunu direkt kullan (LLM'e formatlatma!)
+                    finalAnswer = toolResult;
 
-**Tool Sonucu:**
-{toolResult}
-
-Kurallar:
-- Türkçe cevap ver
-- Tool sonucunu aynen kullan, değiştirme
-- Emoji kullan
-- Kısa ve öz ol
-"),
-                        new ChatMessage(ChatRole.User, request.Message)
-                    };
-
-                    var chatOptions = new ChatOptions
-                    {
-                        Temperature = 0.3f,
-                        MaxOutputTokens = 500
-                    };
-
-                    try
-                    {
-                        // ✅ AIResponse kullan (Microsoft.Extensions.AI. ChatResponse)
-                        AIResponse llmResponse = await _chatClient.GetResponseAsync(messages, chatOptions);
-
-                        // ✅ ChatResponse'dan text'i al
-                        finalAnswer = ExtractTextFromResponse(llmResponse) ?? toolResult;
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "[LLM-ERROR] Tool sonucu formatlama hatası");
-                        // Fallback:  Tool sonucunu direkt kullan
-                        finalAnswer = toolResult;
-                    }
+                    _logger.LogInformation("[MANUAL-TOOL] 📋 Tool sonucu aynen kullanıldı");
                 }
                 else
                 {
-                    // ✅ 2. TOOL ÇALIŞMADI, NORMAL RAG + LLM AKIŞI
+                    // ✅ 2.  TOOL ÇALIŞMADI, NORMAL RAG + LLM AKIŞI
                     _logger.LogInformation("[CHAT] Manuel tool tetiklenmedi, RAG + LLM akışı başlıyor");
 
                     // RAG search
@@ -149,10 +115,7 @@ Kurallar:
 
                     try
                     {
-                        // ✅ AIResponse kullan
                         AIResponse llmResponse = await _chatClient.GetResponseAsync(messages, chatOptions);
-
-                        // ✅ Text'i çıkar
                         finalAnswer = ExtractTextFromResponse(llmResponse) ?? "Üzgünüm, bir hata oluştu. ";
                     }
                     catch (Exception ex)
@@ -161,7 +124,6 @@ Kurallar:
                         finalAnswer = "Üzgünüm, şu anda yanıt veremiyorum.  Lütfen daha sonra tekrar deneyin.";
                     }
                 }
-
                 // Mesajları kaydet
                 await _memoryRepository.SaveMessageAsync(
                     request.SessionId,

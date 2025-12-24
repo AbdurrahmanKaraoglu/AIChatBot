@@ -1,20 +1,21 @@
-﻿using AIChatBot.Services;
-using AIChatBot.Models;
+﻿using AIChatBot.Models;
+using AIChatBot.Services;
 using Microsoft.Data.SqlClient;
 using System.ComponentModel;
 using System.Data;
 
 namespace AIChatBot.Tools
 {
+    /// <summary>
+    /// Sipariş tutarına göre kargo ücreti hesaplar
+    /// </summary>
     public class CalculateShippingTool
     {
         private readonly string _connectionString;
         private readonly ILogger<CalculateShippingTool> _logger;
 
-        // Tools/CalculateShippingTool.cs - DÜZELTME
-
         public CalculateShippingTool(
-            IConfiguration configuration,  // ✅ IConfiguration inject et
+            IConfiguration configuration,
             ILogger<CalculateShippingTool> logger)
         {
             _connectionString = configuration.GetConnectionString("DefaultConnection")!;
@@ -22,12 +23,11 @@ namespace AIChatBot.Tools
         }
 
         [Description("Sipariş tutarına göre kargo ücretini hesaplar")]
-        public async Task<string> Execute(
-            [Description("Sipariş tutarı (TL)")] decimal orderAmount)
+        public async Task<string> Execute(decimal orderAmount)
         {
             _logger.LogInformation("[TOOL] CalculateShipping called: Amount={Amount}", orderAmount);
 
-            // ✅ RBAC: Context'i al (opsiyonel - bu tool herkes kullanabilir)
+            // ✅ RBAC:  Context'i al (opsiyonel - bu tool herkes kullanabilir)
             ToolContext? context = null;
             try
             {
@@ -43,62 +43,59 @@ namespace AIChatBot.Tools
             catch (InvalidOperationException)
             {
                 _logger.LogWarning("[RBAC] ToolContext bulunamadı, anonim kullanıcı olarak devam ediliyor");
-                // Kargo hesaplama herkese açık, context yoksa devam et
             }
 
-            // ✅ RBAC: Rol bazlı kısıtlama (isteğe bağlı)
-            // Örnek: Customer'lar max 10,000 TL için kargo hesaplayabilir
-            if (context != null && context.Role == "Customer" && orderAmount > 10000)
-            {
-                _logger.LogWarning(
-                    "[RBAC-DENIED] Customer UserId:{UserId} tried to calculate shipping for {Amount} TL (limit: 10,000 TL)",
-                    context.UserId,
-                    orderAmount
-                );
-
-                return "❌ Müşteriler en fazla 10,000 TL'lik siparişler için kargo hesaplayabilir.  Daha fazlası için lütfen satış ekibiyle iletişime geçin.";
-            }
-
-            // ✅ Kargo hesaplama
             try
             {
-                using (SqlConnection conn = new SqlConnection(_connectionString))
+                using (var conn = new SqlConnection(_connectionString))
                 {
-                    using (SqlCommand cmd = new SqlCommand("sp_CalculateShipping", conn))
+                    using (var cmd = new SqlCommand("sp_CalculateShipping", conn))
                     {
                         cmd.CommandType = CommandType.StoredProcedure;
-                        cmd.Parameters.Add(new SqlParameter("@OrderAmount", orderAmount));
+                        cmd.Parameters.AddWithValue("@OrderAmount", orderAmount);
 
                         await conn.OpenAsync();
 
-                        using (SqlDataReader reader = await cmd.ExecuteReaderAsync())
+                        using (var reader = await cmd.ExecuteReaderAsync())
                         {
                             if (await reader.ReadAsync())
                             {
-                                decimal cost = reader.GetDecimal(reader.GetOrdinal("ShippingCost"));
-                                int minDays = reader.GetInt32(reader.GetOrdinal("DeliveryDaysMin"));
-                                int maxDays = reader.GetInt32(reader.GetOrdinal("DeliveryDaysMax"));
+                                var shippingCost = reader.GetDecimal(reader.GetOrdinal("ShippingCost"));
+                                var deliveryDaysMin = reader.GetInt32(reader.GetOrdinal("DeliveryDaysMin"));
+                                var deliveryDaysMax = reader.GetInt32(reader.GetOrdinal("DeliveryDaysMax"));
+                                var description = reader.IsDBNull(reader.GetOrdinal("Description"))
+                                    ? ""
+                                    : reader.GetString(reader.GetOrdinal("Description"));
 
                                 _logger.LogInformation(
-                                    "[TOOL] Shipping calculated: Amount={Amount}, Cost={Cost}, Delivery={MinDays}-{MaxDays} days",
-                                    orderAmount, cost, minDays, maxDays
+                                    "[TOOL] Shipping calculated: Amount={Amount}, Cost={Cost}, Delivery={Min}-{Max} days",
+                                    orderAmount,
+                                    shippingCost,
+                                    deliveryDaysMin,
+                                    deliveryDaysMax
                                 );
 
-                                if (cost == 0)
-                                    return $"✅ Kargo ücretsiz! 🎉\n📦 Teslimat süresi: {minDays}-{maxDays} iş günü. ";
-                                else
-                                    return $"✅ Kargo ücreti: {cost} TL\n📦 Teslimat süresi: {minDays}-{maxDays} iş günü.";
+                                // ✅ DETAYLI FORMAT (LLM'e gönderilmeyecek, direkt kullanılacak)
+                                var response = $@"🚚 **Kargo Bilgileri:**
+
+💰 Kargo Ücreti: {shippingCost:N2} TL{(shippingCost == 0 ? " (ÜCRETSİZ KARGO)" : "")}
+📦 Teslimat Süresi: {deliveryDaysMin}-{deliveryDaysMax} iş günü
+
+{description}";
+
+                                return response;
+                            }
+                            else
+                            {
+                                return "❌ Bu sipariş tutarı için kargo kuralı bulunamadı. ";
                             }
                         }
                     }
                 }
-
-                _logger.LogWarning("[TOOL] Kargo kuralı bulunamadı: Amount={Amount}", orderAmount);
-                return "❌ Kargo bilgisi bulunamadı.";
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "[TOOL-ERROR] Kargo hesaplama hatası: Amount={Amount}", orderAmount);
+                _logger.LogError(ex, "[TOOL-ERROR] CalculateShipping hatası:  Amount={Amount}", orderAmount);
                 return $"❌ Kargo hesaplama hatası: {ex.Message}";
             }
         }
