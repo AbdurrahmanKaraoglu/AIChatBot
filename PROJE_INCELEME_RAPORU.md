@@ -246,7 +246,7 @@ catch (TaskCanceledException ex)
 
 ### 4.1 Tespit Edilen Güvenlik Sorunları
 
-#### 4.1.1 🔴 **KRİTİK: SQL Connection String - Hard-coded Credentials**
+#### 4.1.1 **SQL Connection String - Hard-coded Credentials**
 
 **Dosya:** `appsettings.json`
 ```json
@@ -276,7 +276,7 @@ dotnet user-secrets init
 dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Server=...;..."
 ```
 
-#### 4.1.2 🟡 **ORTA: SQL Injection Riski - Partially Mitigated**
+#### 4.1.2 **SQL Injection Riski - Partially Mitigated**
 
 **KnowledgeBaseRepository.cs:**
 ```csharp
@@ -290,7 +290,7 @@ Ancak bazı stored procedure'lerin içeriği kontrol edilemedi. **Öneri:**
 - Stored procedure'lerde dinamik SQL kullanılıyorsa dikkatli olun
 - Input validation ekleyin
 
-#### 4.1.3 🟡 **ORTA: Input Validation Eksiklikleri**
+#### 4.1.3 **Input Validation Eksiklikleri**
 
 **ChatController.cs:**
 ```csharp
@@ -323,7 +323,7 @@ public class ChatRequest
 }
 ```
 
-#### 4.1.4 🟢 **DÜŞÜK: RBAC İmplementasyonu - Başlangıç Aşamasında**
+#### 4.1.4 **RBAC İmplementasyonu - Başlangıç Aşamasında**
 
 **ChatService.cs:**
 ```csharp
@@ -353,7 +353,7 @@ if (context.Role != "Admin" && !context.AllowedProductIds.Contains(productId))
 }
 ```
 
-#### 4.1.5 🟢 **DÜŞÜK: HTTPS Enforcement**
+#### 4.1.5 **HTTPS Enforcement**
 
 **appsettings.json:**
 ```json
@@ -561,9 +561,8 @@ public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(...)
 
 ## 7. Öneriler ve İyileştirmeler
 
-### 7.1 Acil Öncelikli (P0)
+### 7.1 Güvenlik İyileştirmeleri
 
-#### 7.1.1 Güvenlik
 - [ ] Connection string'i user secrets veya environment variable'a taşı
 - [ ] Input validation attribute'leri ekle
 - [ ] HTTPS enforcement (production)
@@ -581,16 +580,14 @@ builder.Services.AddRateLimiter(options =>
 });
 ```
 
-#### 7.1.2 Null Reference Warnings
 - [ ] CS8604 warning'lerini düzelt
 - [ ] Nullable reference types kontrollerini tamamla
 
-### 7.2 Yüksek Öncelikli (P1)
+### 7.2 Test ve Kalite
 
-#### 7.2.1 Testing
 - [ ] Unit test projesi oluştur
 - [ ] Integration test'ler ekle
-- [ ] Test coverage %70+ hedefle
+- [ ] Test coverage hedefi belirle
 
 ```bash
 # Test projesi oluşturma
@@ -600,31 +597,28 @@ dotnet add package Moq
 dotnet add package FluentAssertions
 ```
 
-#### 7.2.2 Monitoring & Observability
+### 7.3 Monitoring ve Performans
+
 - [ ] Application Insights veya Prometheus entegrasyonu
 - [ ] Custom metrics (örn: chat response time, tool call success rate)
 - [ ] Distributed tracing (OpenTelemetry)
-
-#### 7.2.3 Performance
 - [ ] Caching stratejisi ekle (Memory + Distributed)
 - [ ] N+1 query problemini çöz
 - [ ] Database indexing analizi
 
-### 7.3 Orta Öncelikli (P2)
+### 7.4 Code Quality ve Dokümantasyon
 
-#### 7.3.1 Code Quality
 - [ ] Code coverage tool'u ekle (Coverlet)
 - [ ] Static code analysis (SonarQube veya ReSharper)
 - [ ] EditorConfig dosyası ekle
 - [ ] Git hooks (pre-commit linting)
-
-#### 7.3.2 Documentation
 - [ ] README.md oluştur
 - [ ] API usage examples
 - [ ] Architecture diagrams (draw.io veya PlantUML)
 - [ ] Setup guide
 
-#### 7.3.3 CI/CD
+### 7.5 CI/CD ve Deployment
+
 - [ ] GitHub Actions workflow
 - [ ] Automated testing
 - [ ] Docker support
@@ -657,9 +651,9 @@ jobs:
         run: dotnet test --no-build --verbosity normal
 ```
 
-### 7.4 Düşük Öncelikli (P3)
+### 7.6 İleri Seviye Özellikler (Opsiyonel)
 
-- [ ] GraphQL endpoint (opsiyonel)
+- [ ] GraphQL endpoint
 - [ ] WebSocket support (real-time chat)
 - [ ] Multi-language support (i18n)
 - [ ] Admin dashboard
@@ -698,10 +692,10 @@ Planning → Development → [Testing] → Production → Maintenance
                         You are here
 ```
 
-**Değerlendirme:** Proje "**Development to Testing**" aşamasında. Production'a geçmeden önce:
-1. Security fixes (P0)
-2. Test coverage (P1)
-3. Performance optimizations (P1)
+**Değerlendirme:** Proje "**Development to Testing**" aşamasında. Çeşitli iyileştirme fırsatları mevcut:
+1. Güvenlik iyileştirmeleri
+2. Test coverage
+3. Performance optimizations
 
 ### 8.3 Production Readiness Checklist
 
@@ -709,27 +703,27 @@ Planning → Development → [Testing] → Production → Maintenance
 - [x] Database integration
 - [x] Logging infrastructure
 - [x] Health checks
-- [ ] Security hardening (P0)
-- [ ] Unit tests (P1)
-- [ ] Integration tests (P1)
-- [ ] Load testing (P1)
-- [ ] CI/CD pipeline (P2)
-- [ ] Docker/Container support (P2)
-- [ ] Monitoring/Alerting (P1)
-- [ ] Documentation (README, setup guide) (P2)
+- [ ] Security hardening
+- [ ] Unit tests
+- [ ] Integration tests
+- [ ] Load testing
+- [ ] CI/CD pipeline
+- [ ] Docker/Container support
+- [ ] Monitoring/Alerting
+- [ ] Documentation (README, setup guide)
 
-**Eksik Item Sayısı:** 8/12 (67% tamamlanmış)
+**Tamamlanma Durumu:** 4/12 temel özellik mevcut
 
-### 8.4 Önerilen Roadmap
+### 8.4 Örnek Geliştirme Yol Haritası
 
 #### Kısa Vade (1-2 hafta)
-1. Güvenlik düzeltmeleri (connection string, input validation)
+1. Güvenlik iyileştirmeleri (connection string, input validation)
 2. Null reference warning'leri düzelt
 3. README.md ve setup guide oluştur
 4. Unit test altyapısını kur
 
 #### Orta Vade (1 ay)
-1. Test coverage %70+ ulaş
+1. Test coverage artırma
 2. Caching implementasyonu
 3. Performance optimizations
 4. CI/CD pipeline

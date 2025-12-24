@@ -1,23 +1,25 @@
-# 🔧 AI ChatBot Projesi - İyileştirme Eylem Planı
+# 🔧 AI ChatBot Projesi - İyileştirme Önerileri Rehberi
 
 **Tarih:** 24 Aralık 2025  
-**Hedef:** Production-ready hale getirme  
-**Tahmini Süre:** 4-6 hafta
+**Hedef:** Proje geliştirme önerileri  
+**Tahmini Süre:** 4-6 hafta (opsiyonel)
 
 ---
 
-## 📋 Öncelik Matrisi
+## 📋 İyileştirme Kategorileri
 
-| Öncelik | Kategori | Tahmini Süre | Etki |
-|---------|----------|--------------|------|
-| 🔴 P0 | Güvenlik | 1-2 gün | Kritik |
-| 🟠 P1 | Test & Performans | 1-2 hafta | Yüksek |
-| 🟡 P2 | Code Quality & Docs | 1 hafta | Orta |
-| 🟢 P3 | Nice-to-have | 1-2 hafta | Düşük |
+Bu dokümanda projeyi geliştirmek isteyenler için çeşitli öneriler bulunmaktadır:
+
+| Kategori | Tahmini Süre | Açıklama |
+|----------|--------------|----------|
+| Güvenlik | 1-2 gün | Connection string, validation, rate limiting |
+| Test & Performans | 1-2 hafta | Unit tests, caching, optimizasyon |
+| Code Quality & Docs | 1 hafta | Refactoring, dokümantasyon |
+| İleri Özellikler | 1-2 hafta | WebSocket, monitoring, advanced features |
 
 ---
 
-## 🔴 P0: Acil Güvenlik Düzeltmeleri (1-2 gün)
+## 🔒 Güvenlik İyileştirme Önerileri
 
 ### 1.1 Connection String Güvenliği
 
@@ -321,7 +323,7 @@ dotnet build
 
 ---
 
-## 🟠 P1: Test ve Performans (1-2 hafta)
+## 🧪 Test ve Performans Önerileri
 
 ### 2.1 Unit Test Altyapısı Kurulumu
 
@@ -708,7 +710,7 @@ public async Task<List<Document>> SearchDocumentsAsync(string query)
 
 ---
 
-## 🟡 P2: Code Quality & Documentation (1 hafta)
+## 📝 Code Quality ve Dokümantasyon Önerileri
 
 ### 3.1 README.md Oluşturma
 
@@ -1000,7 +1002,7 @@ docker-compose down
 
 ---
 
-## 🟢 P3: Nice-to-have Features (1-2 hafta)
+## 🚀 İleri Seviye Özellik Önerileri
 
 ### 4.1 WebSocket Support (Real-time Chat)
 
@@ -1046,27 +1048,27 @@ app.MapHub<ChatHub>("/chathub");
 
 ## 📊 İlerleme Takibi
 
-### Haftalık Hedefler
+### Örnek Haftalık Plan
 
 **Hafta 1:**
-- [x] P0: Güvenlik düzeltmeleri (2 gün)
-- [ ] P1: Unit test altyapısı (3 gün)
+- [ ] Güvenlik iyileştirmeleri
+- [ ] Unit test altyapısı
 
 **Hafta 2:**
-- [ ] P1: Integration tests
-- [ ] P1: Performance optimizations
+- [ ] Integration tests
+- [ ] Performance optimizations
 
 **Hafta 3:**
-- [ ] P2: Code quality improvements
-- [ ] P2: Documentation (README, setup guide)
+- [ ] Code quality improvements
+- [ ] Documentation (README, setup guide)
 
 **Hafta 4:**
-- [ ] P2: CI/CD pipeline
-- [ ] P2: Docker support
+- [ ] CI/CD pipeline
+- [ ] Docker support
 
 **Hafta 5-6:**
-- [ ] P3: Additional features (WebSocket, monitoring)
-- [ ] Final testing ve deployment
+- [ ] İleri seviye özellikler (opsiyonel)
+- [ ] Final testing
 
 ---
 

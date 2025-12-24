@@ -31,10 +31,10 @@ Detaylı teknik analiz ve değerlendirme
 
 ### 3. 🔧 [IYILESTIRME_EYLEM_PLANI.md](./IYILESTIRME_EYLEM_PLANI.md)
 Adım adım iyileştirme rehberi
-- P0: Acil güvenlik düzeltmeleri (kod örnekleri ile)
-- P1: Test ve performans iyileştirmeleri
-- P2: Code quality ve dokümantasyon
-- P3: Nice-to-have özellikler
+- Güvenlik iyileştirmeleri (kod örnekleri ile)
+- Test ve performans önerileri
+- Code quality ve dokümantasyon
+- İleri seviye özellikler
 - Haftalık hedefler ve checklist
 
 **Okuma süresi:** 30-45 dakika  
@@ -74,34 +74,32 @@ Planlama → Geliştirme → [Testing] → Production → Bakım
 - ✅ Error handling
 - ✅ RAG implementation
 
-**Eksik (Acil):**
-- ❌ Security hardening (P0)
-- ❌ Unit tests (P1)
-- ❌ Integration tests (P1)
-- ❌ CI/CD pipeline (P2)
+**İyileştirilebilir Alanlar:**
+- Security hardening
+- Unit tests
+- Integration tests
+- CI/CD pipeline
 
 ---
 
-## 🔴 Acil Aksiyonlar (Bu Hafta)
+## 💡 Olası İyileştirme Önerileri
 
-### P0 - Güvenlik (1-2 gün)
+### Güvenlik İyileştirmeleri
 
 ```bash
-# 1. User secrets setup
+# User secrets setup
 cd AIChatBot
 dotnet user-secrets init
 dotnet user-secrets set "ConnectionStrings:DefaultConnection" "YOUR_CONNECTION_STRING"
 
-# 2. Input validation
+# Input validation
 dotnet add package FluentValidation.AspNetCore
 
-# 3. Rate limiting
+# Rate limiting
 dotnet add package AspNetCoreRateLimit
 ```
 
-**Detaylar:** `IYILESTIRME_EYLEM_PLANI.md` → Bölüm 1
-
-### P1 - Test Altyapısı (3-5 gün)
+### Test Altyapısı
 
 ```bash
 # Test projesi oluştur
@@ -114,33 +112,32 @@ dotnet add package Moq
 dotnet add package FluentAssertions
 ```
 
-**Detaylar:** `IYILESTIRME_EYLEM_PLANI.md` → Bölüm 2.1
+**Detaylar:** `IYILESTIRME_EYLEM_PLANI.md` dosyasında kod örnekleri ve açıklamalar mevcuttur.
 
 ---
 
-## 🎯 Önerilen Roadmap
+## 🎯 Örnek Geliştirme Yol Haritası
 
-| Hafta | Öncelik | Görevler | Süre |
-|-------|---------|----------|------|
-| 1 | 🔴 P0 | Güvenlik düzeltmeleri | 2 gün |
-| 1 | 🟡 P1 | Test altyapısı | 3 gün |
-| 2 | 🟡 P1 | Integration tests + Performance | 5 gün |
-| 3 | 🟡 P2 | Code quality + README | 5 gün |
-| 4 | 🟡 P2 | CI/CD + Docker | 5 gün |
+Projeyi geliştirmek isteyenler için örnek bir zaman çizelgesi:
 
-**Toplam:** ~4 hafta → **Production-ready** 🚀
+| Hafta | Alan | Önerilen Görevler | Tahmini Süre |
+|-------|------|------------------|--------------|
+| 1 | Güvenlik | Connection string, validation, rate limiting | 2-5 gün |
+| 2 | Test | Unit test altyapısı, test yazma | 5 gün |
+| 3 | Performans | Caching, query optimizasyonları | 3-5 gün |
+| 4 | DevOps | CI/CD, Docker, monitoring | 5 gün |
 
 ---
 
-## 📈 Anahtar Metrikler
+## 📈 Mevcut Durum ve İyileştirme Fırsatları
 
-| Metrik | Mevcut | Hedef | Öncelik |
-|--------|--------|-------|---------|
-| 🔒 Security Issues | 3 | 0 | P0 |
-| 🧪 Test Coverage | 0% | 70%+ | P1 |
-| ⚠️ Code Warnings | 5 | 0 | P0 |
-| ⚡ API Response Time | ? | <200ms | P1 |
-| 📊 Uptime | ? | 99.9% | P1 |
+| Alan | Mevcut Durum | İyileştirme Potansiyeli |
+|------|--------------|------------------------|
+| 🔒 Güvenlik | Temel güvenlik mevcut | Connection string yönetimi, input validation |
+| 🧪 Test Coverage | Henüz test yok | Unit ve integration testler eklenebilir |
+| ⚠️ Code Warnings | 5 warning | Null reference uyarıları düzeltilebilir |
+| ⚡ Performans | Functional | Caching ve query optimizasyonları |
+| 📊 Monitoring | Health checks var | Kapsamlı monitoring eklenebilir |
 
 ---
 
