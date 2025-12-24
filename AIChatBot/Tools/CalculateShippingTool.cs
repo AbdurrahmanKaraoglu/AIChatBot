@@ -11,8 +11,10 @@ namespace AIChatBot.Tools
         private readonly string _connectionString;
         private readonly ILogger<CalculateShippingTool> _logger;
 
+        // Tools/CalculateShippingTool.cs - DÜZELTME
+
         public CalculateShippingTool(
-            IConfiguration configuration,
+            IConfiguration configuration,  // ✅ IConfiguration inject et
             ILogger<CalculateShippingTool> logger)
         {
             _connectionString = configuration.GetConnectionString("DefaultConnection")!;

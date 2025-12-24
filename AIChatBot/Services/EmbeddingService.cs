@@ -240,6 +240,22 @@ namespace AIChatBot.Services
 
             return dotProduct / (magnitude1 * magnitude2);
         }
+       
+        
+        /// <summary>
+        /// Embedding'i JSON string formatında döndürür (SQL VECTOR için)
+        /// </summary>
+        public async Task<string> GetEmbeddingAsJsonAsync(string text)
+        {
+            var embedding = await GetEmbeddingAsync(text);
+
+            // ✅ SQL Server VECTOR formatı:  "[0.123, 0.456, ...]"
+            var json = "[" + string.Join(",", embedding.Select(v =>
+                v.ToString("G", System.Globalization.CultureInfo.InvariantCulture))) + "]";
+
+            return json;
+        }
+
     }
 
     #region DTOs

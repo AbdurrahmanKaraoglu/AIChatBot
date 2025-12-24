@@ -68,5 +68,18 @@ namespace AIChatBot.Repository.KnowledgeBase
   
         Task<Document?> GetDocumentById(int documentId);
         Task<bool> UpdateEmbedding(int documentId, string embeddingJson);
+
+        // ✅ YENİ: Full-Text Search
+        Task<List<Document>> FullTextSearchAsync(string query, int topN = 10);
+
+        // ✅ YENİ:  Kategori listesi
+        Task<List<string>> GetAllCategoriesAsync();
+
+        // ✅ YENİ: Vector Search JSON parametreli
+        Task<List<(Document Doc, double Similarity)>> VectorSearchWithJsonAsync(
+            string queryVectorJson,
+            int topK = 5,
+            double minSimilarity = 0.5
+        );
     }
 }

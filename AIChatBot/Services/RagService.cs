@@ -23,9 +23,10 @@ namespace AIChatBot.Services
         /// <summary>
         /// Semantic search (Vector-based) - Öncelikli arama yöntemi
         /// </summary>
+        // Services/RagService.cs - DÜZELTME
+
         public async Task<List<Document>> SemanticSearchAsync(string query, int topK = 5)
         {
-            // Embedding servisi yoksa keyword search'e düş
             if (_embeddingService == null)
             {
                 _logger.LogWarning("[RAG] EmbeddingService bulunamadı, keyword search kullanılıyor");
@@ -36,28 +37,22 @@ namespace AIChatBot.Services
             {
                 _logger.LogInformation("[SEMANTIC-SEARCH] Query: '{Query}', TopK: {TopK}", query, topK);
 
-                // 1. Query'yi vektöre çevir
-                var queryVector = await _embeddingService.GetEmbeddingAsync(query);
+                // 1. Query'yi vektöre çevir (JSON formatında)
+                var queryVectorJson = await _embeddingService.GetEmbeddingAsJsonAsync(query);
 
-                _logger.LogDebug("[SEMANTIC-SEARCH] Embedding oluşturuldu: {Dimension} boyut", queryVector.Length);
+                _logger.LogDebug("[SEMANTIC-SEARCH] Embedding JSON oluşturuldu");
 
-                // 2. Vector search yap
-                var results = await _knowledgeBaseRepository.VectorSearchAsync(queryVector, topK);
+                // 2. Vector search yap (JSON parametreli yeni metot)
+                var results = await _knowledgeBaseRepository.VectorSearchWithJsonAsync(
+                    queryVectorJson,
+                    topK,
+                    minSimilarity: 0.5
+                );
 
                 _logger.LogInformation(
                     "[SEMANTIC-SEARCH] {Count} belge bulundu",
                     results.Count
                 );
-
-                // Similarity score'ları logla
-                foreach (var (doc, similarity) in results)
-                {
-                    _logger.LogDebug(
-                        "[SEMANTIC-SEARCH] • {Title} (Similarity: {Similarity:P2})",
-                        doc.Title,
-                        similarity
-                    );
-                }
 
                 return results.Select(r => r.Doc).ToList();
             }
@@ -65,11 +60,10 @@ namespace AIChatBot.Services
             {
                 _logger.LogError(
                     ex,
-                    "[SEMANTIC-SEARCH-ERROR] Query: '{Query}', Fallback to keyword search",
+                    "[SEMANTIC-SEARCH-ERROR] Query:  '{Query}', Fallback to keyword search",
                     query
                 );
 
-                // Hata durumunda keyword search'e düş
                 return await SearchDocumentsAsync(query);
             }
         }

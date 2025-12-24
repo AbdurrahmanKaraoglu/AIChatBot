@@ -520,5 +520,161 @@ namespace AIChatBot.Repository.KnowledgeBase
         }
 
         #endregion
+
+        // KnowledgeBaseRepository.cs - Implementation
+
+        public async Task<List<Document>> FullTextSearchAsync(string query, int topN = 10)
+        {
+            var documents = new List<Document>();
+
+            try
+            {
+                using (var connection = new SqlConnection(_connectionString))
+                {
+                    using (var command = new SqlCommand("sp_FullTextSearch", connection))
+                    {
+                        command.CommandType = CommandType.StoredProcedure;
+                        command.Parameters.AddWithValue("@SearchQuery", query);
+                        command.Parameters.AddWithValue("@TopN", topN);
+
+                        await connection.OpenAsync();
+
+                        using (var reader = await command.ExecuteReaderAsync())
+                        {
+                            while (await reader.ReadAsync())
+                            {
+                                documents.Add(new Document
+                                {
+                                    Id = reader.GetInt32(reader.GetOrdinal("DocumentId")),
+                                    Title = reader.GetString(reader.GetOrdinal("Title")),
+                                    Content = reader.GetString(reader.GetOrdinal("Content")),
+                                    Category = reader.IsDBNull(reader.GetOrdinal("Category"))
+                                        ? ""
+                                        : reader.GetString(reader.GetOrdinal("Category")),
+                                    Tags = reader.IsDBNull(reader.GetOrdinal("Tags"))
+                                        ? ""
+                                        : reader.GetString(reader.GetOrdinal("Tags")),
+                                    Price = reader.IsDBNull(reader.GetOrdinal("Price"))
+                                        ? null
+                                        : reader.GetDecimal(reader.GetOrdinal("Price"))
+                                });
+                            }
+                        }
+                    }
+                }
+
+                _logger.LogInformation(
+                    "[FULLTEXT-SEARCH] Query: '{Query}', Results:{Count}",
+                    query,
+                    documents.Count
+                );
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[FULLTEXT-SEARCH-ERROR] Query:'{Query}'", query);
+            }
+
+            return documents;
+        }
+
+        public async Task<List<string>> GetAllCategoriesAsync()
+        {
+            var categories = new List<string>();
+
+            try
+            {
+                using (var connection = new SqlConnection(_connectionString))
+                {
+                    using (var command = new SqlCommand("sp_GetAllCategories", connection))
+                    {
+                        command.CommandType = CommandType.StoredProcedure;
+
+                        await connection.OpenAsync();
+
+                        using (var reader = await command.ExecuteReaderAsync())
+                        {
+                            while (await reader.ReadAsync())
+                            {
+                                categories.Add(reader.GetString(reader.GetOrdinal("Category")));
+                            }
+                        }
+                    }
+                }
+
+                _logger.LogInformation("[CATEGORIES] {Count} kategori bulundu", categories.Count);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[CATEGORIES-ERROR]");
+            }
+
+            return categories;
+        }
+
+        public async Task<List<(Document Doc, double Similarity)>> VectorSearchWithJsonAsync(
+            string queryVectorJson,
+            int topK = 5,
+            double minSimilarity = 0.5)
+        {
+            var results = new List<(Document, double)>();
+
+            try
+            {
+                using (var connection = new SqlConnection(_connectionString))
+                {
+                    using (var command = new SqlCommand("sp_KnowledgeBase_VectorSearch", connection))
+                    {
+                        command.CommandType = CommandType.StoredProcedure;
+                        command.CommandTimeout = 60;
+
+                        // ✅ JSON string olarak gönder
+                        command.Parameters.AddWithValue("@QueryVectorJson", queryVectorJson);
+                        command.Parameters.AddWithValue("@TopK", topK);
+                        command.Parameters.AddWithValue("@MinSimilarity", minSimilarity);
+
+                        await connection.OpenAsync();
+
+                        using (var reader = await command.ExecuteReaderAsync())
+                        {
+                            while (await reader.ReadAsync())
+                            {
+                                var doc = new Document
+                                {
+                                    Id = reader.GetInt32(reader.GetOrdinal("DocumentId")),
+                                    Title = reader.GetString(reader.GetOrdinal("Title")),
+                                    Content = reader.GetString(reader.GetOrdinal("Content")),
+                                    Category = reader.IsDBNull(reader.GetOrdinal("Category"))
+                                        ? ""
+                                        : reader.GetString(reader.GetOrdinal("Category")),
+                                    Tags = reader.IsDBNull(reader.GetOrdinal("Tags"))
+                                        ? ""
+                                        : reader.GetString(reader.GetOrdinal("Tags")),
+                                    Price = reader.IsDBNull(reader.GetOrdinal("Price"))
+                                        ? null
+                                        : reader.GetDecimal(reader.GetOrdinal("Price"))
+                                };
+
+                                var similarity = reader.GetDouble(reader.GetOrdinal("Similarity"));
+
+                                results.Add((doc, similarity));
+                            }
+                        }
+                    }
+                }
+
+                _logger.LogInformation(
+                    "[VECTOR-SEARCH] TopK:{TopK}, Results:{Count}",
+                    topK,
+                    results.Count
+                );
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[VECTOR-SEARCH-ERROR]");
+            }
+
+            return results;
+        }
+
     }
 }

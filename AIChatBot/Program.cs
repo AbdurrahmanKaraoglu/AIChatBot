@@ -170,6 +170,32 @@ try
             toolsDictionary.Add("CalculateTotalPriceTool", calculateTotalPriceAITool);
             Log.Information("[INIT] ✅ CalculateTotalPriceTool kaydedildi");
 
+            // 🔧 6. GetReturnPolicyTool
+            var getReturnPolicyTool = new GetReturnPolicyTool(
+                sp.GetRequiredService<IConfiguration>(),
+                logger.CreateLogger<GetReturnPolicyTool>()
+            );
+            var getReturnPolicyAITool = AIFunctionFactory.Create(
+                getReturnPolicyTool.Execute,
+                name: "GetReturnPolicyTool",
+                description: "İade politikası bilgilerini getirir"
+            );
+            toolsDictionary.Add("GetReturnPolicyTool", getReturnPolicyAITool);
+            Log.Information("[INIT] ✅ GetReturnPolicyTool kaydedildi");
+
+            // 🔧 7. GetPaymentMethodsTool
+            var getPaymentMethodsTool = new GetPaymentMethodsTool(
+                sp.GetRequiredService<IConfiguration>(),
+                logger.CreateLogger<GetPaymentMethodsTool>()
+            );
+            var getPaymentMethodsAITool = AIFunctionFactory.Create(
+                getPaymentMethodsTool.Execute,
+                name: "GetPaymentMethodsTool",
+                description: "Mevcut ödeme yöntemlerini listeler"
+            );
+            toolsDictionary.Add("GetPaymentMethodsTool", getPaymentMethodsAITool);
+            Log.Information("[INIT] ✅ GetPaymentMethodsTool kaydedildi");
+
             Log.Information("========================================");
             Log.Information("[INIT] 🛠️ Toplam {Count} tool kaydedildi", toolsDictionary.Count);
             Log.Information("========================================");
