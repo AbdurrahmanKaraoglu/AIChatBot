@@ -10,6 +10,7 @@ namespace AIChatBot.Services
         private readonly IChatMemoryRepository _memoryRepository;
         private readonly RagService _rag;
         private readonly IEnumerable<AITool> _tools;
+        private readonly Dictionary<string, AITool> _toolsDictionary;
         private readonly ILogger<ChatService> _logger;
 
         public ChatService(
@@ -17,12 +18,14 @@ namespace AIChatBot.Services
             IChatMemoryRepository memoryRepository,
             RagService rag,
             IEnumerable<AITool> tools,
+            Dictionary<string, AITool> toolsDictionary,
             ILogger<ChatService> logger)
         {
             _chatClient = chatClient;
             _memoryRepository = memoryRepository;
             _rag = rag;
             _tools = tools;
+            _toolsDictionary = toolsDictionary;
             _logger = logger;
         }
 
@@ -58,20 +61,20 @@ namespace AIChatBot.Services
                 // 2. System prompt oluştur
                 var systemPrompt = BuildSystemPrompt(userContext, ragContext);
 
-                // 3.  Geçmişi al
+                // 3. Geçmişi al
                 var messages = await _memoryRepository.GetHistoryAsync(request.SessionId);
                 messages = messages.Where(m => m.Role != ChatRole.System).ToList();
 
                 // 4. System prompt ekle
                 messages.Insert(0, new ChatMessage(ChatRole.System, systemPrompt));
 
-                // 5.  Kullanıcı mesajını ekle
+                // 5. Kullanıcı mesajını ekle
                 messages.Add(new ChatMessage(ChatRole.User, request.Message));
 
-                // 6. ChatOptions
+                // 6. ChatOptions - TOOL CALLING AKTİF! 
                 var chatOptions = new ChatOptions
                 {
-                    //Tools = _tools?.ToList(),
+                    Tools = _tools?.ToList(),
                     Temperature = 0.3f,
                     TopP = 0.9f,
                     MaxOutputTokens = 2000
@@ -82,7 +85,7 @@ namespace AIChatBot.Services
                     chatOptions.Tools?.Count ?? 0
                 );
 
-                // ✅ 7. Tool calling loop (STREAMING)
+                // 7. Tool calling loop (STREAMING)
                 var responseText = "";
                 var usedTools = new List<string>();
                 var conversationMessages = messages.ToList();
@@ -93,12 +96,13 @@ namespace AIChatBot.Services
                 while (iteration < maxIterations)
                 {
                     iteration++;
-                    _logger.LogDebug("[LLM] Iteration {Iteration}/{Max}", iteration, maxIterations);
+                    _logger.LogDebug("[LLM] 🔄 Iteration {Iteration}/{Max}", iteration, maxIterations);
 
-                    ChatMessage? assistantMessage = null;
                     var currentText = "";
                     var hasToolCall = false;
+                    var toolCalls = new List<FunctionCallContent>();
 
+                    // Streaming response
                     await foreach (var update in _chatClient.GetStreamingResponseAsync(conversationMessages, chatOptions))
                     {
                         // Text topla
@@ -107,56 +111,80 @@ namespace AIChatBot.Services
                             currentText += update.Text;
                         }
 
-                        // Tool çağrısı var mı?
-                        var functionCalls = update.Contents
-                            ?.OfType<FunctionCallContent>()
-                            .ToList() ?? new List<FunctionCallContent>();
-
-                        if (functionCalls.Any())
+                        // Tool call tespit
+                        if (update.Contents.Any(c => c is FunctionCallContent))
                         {
                             hasToolCall = true;
+                            var toolCallContent = update.Contents.OfType<FunctionCallContent>().First();
+                            toolCalls.Add(toolCallContent);
 
-                            foreach (var functionCall in functionCalls)
-                            {
-                                _logger.LogInformation(
-                                    "[TOOL-CALL] Tool: {ToolName}, CallId: {CallId}",
-                                    functionCall.Name,
-                                    functionCall.CallId
-                                );
-
-                                if (!string.IsNullOrEmpty(functionCall.Name))
-                                {
-                                    if (!usedTools.Contains(functionCall.Name))
-                                        usedTools.Add(functionCall.Name);
-                                }
-                            }
-
-                            // Tool çağrısını conversation'a ekle
-                            assistantMessage = new ChatMessage(ChatRole.Assistant, update.Contents?.ToList() ?? new List<AIContent>());
-                            conversationMessages.Add(assistantMessage);
+                            _logger.LogInformation(
+                                "[TOOL-CALL] 🔧 {ToolName}({Arguments})",
+                                toolCallContent.Name,
+                                toolCallContent.Arguments
+                            );
                         }
                     }
 
-                    // Tool çağrısı yapıldıysa bir sonraki iterasyona geç
-                    if (hasToolCall)
+                    // Tool call varsa
+                    if (hasToolCall && toolCalls.Any())
                     {
-                        _logger.LogDebug("[LLM] Tool call detected, next iteration");
+                        foreach (var toolCall in toolCalls)
+                        {
+                            try
+                            {
+                                // Tool'u çalıştır
+                                var toolResult = await ExecuteToolAsync(toolCall);
+
+                                // Tool sonucunu mesajlara ekle
+                                conversationMessages.Add(new ChatMessage(
+                                    ChatRole.Tool,
+                                    toolResult
+                                ));
+
+                                usedTools.Add(toolCall.Name);
+
+                                _logger.LogInformation(
+                                    "[TOOL-RESULT] ✅ {ToolName} sonucu eklendi",
+                                    toolCall.Name
+                                );
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogError(
+                                    ex,
+                                    "[TOOL-ERROR] ❌ {ToolName} çalıştırılamadı",
+                                    toolCall.Name
+                                );
+
+                                // Hata mesajını da conversation'a ekle
+                                conversationMessages.Add(new ChatMessage(
+                                    ChatRole.Tool,
+                                    $"Tool hatası: {ex.Message}"
+                                ));
+                            }
+                        }
+
+                        // Bir sonraki iterasyona geç
                         continue;
                     }
 
-                    // Tool çağrısı yok, final cevap
+                    // Tool call yoksa, final cevap
                     responseText = currentText;
-                    _logger.LogInformation("[LLM] Final cevap alındı: {Length} karakter", responseText.Length);
                     break;
                 }
 
+                // Timeout kontrolü
                 if (iteration >= maxIterations)
                 {
-                    _logger.LogWarning("[LLM] Max iteration limit reached");
-                    responseText = responseText.Length > 0
-                        ? responseText
-                        : "Üzgünüm, isteğinizi tamamlayamadım. Lütfen tekrar deneyin.";
+                    _logger.LogWarning("[LLM] ⚠️ Max iteration limit reached ({Max})", maxIterations);
+                    responseText += "\n\n_[Sistem:  İşlem zaman aşımına uğradı]_";
                 }
+
+                _logger.LogInformation(
+                    "[LLM] ✅ Cevap hazır. Used Tools: {Tools}",
+                    string.Join(", ", usedTools)
+                );
 
                 // 8. Mesajları kaydet
                 await SaveMessagesAsync(request, userContext, responseText);
@@ -209,26 +237,20 @@ namespace AIChatBot.Services
 
         private void SetToolContext(ChatRequest request, UserContext userContext)
         {
-            if (string.IsNullOrEmpty(userContext.UserId))
+            var toolContext = new ToolContext
             {
-                _logger.LogWarning("[RBAC] UserId boş, context set edilmedi");
-                return;
-            }
-
-            var context = new ToolContext
-            {
-                UserId = int.TryParse(userContext.UserId, out var uid) ? uid : 0,
-                Role = request.Role ?? "Customer",
-                AllowedProductIds = request.AllowedProductIds ?? new List<int>()
+                UserId = userContext.UserId,
+                Role = request.Role ?? userContext.Role ?? "User",
+                AllowedProductIds = userContext.AllowedProductIds ?? new List<int>()
             };
 
-            ToolContextManager.SetContext(context);
+            ToolContextManager.SetContext(toolContext);
 
             _logger.LogInformation(
-                "[RBAC-CONTEXT] UserId:{UserId}, Role:{Role}, AllowedProducts:[{Products}]",
-                context.UserId,
-                context.Role,
-                string.Join(", ", context.AllowedProductIds)
+                "[RBAC] 🔐 Context set:  UserId={UserId}, Role={Role}, AllowedProducts={Count}",
+                toolContext.UserId,
+                toolContext.Role,
+                toolContext.AllowedProductIds.Count
             );
         }
 
@@ -248,20 +270,16 @@ namespace AIChatBot.Services
 
 KURALLAR:
 1.  SADECE bilgi bankasındaki bilgileri kullan
-2.  Bilmediğin şeyi ASLA uydurma
+2. Bilmediğin şeyi ASLA uydurma
 3. Türkçe konuş
 4. Yardımcı ve profesyonel ol
 
 ⚠️ TOOL KULLANIMI:
-- Ürün bilgisi gerekiyorsa GetProductInfo tool'unu kullan
-- Kargo hesabı gerekiyorsa CalculateShipping tool'unu kullan
-- Döküman araması gerekiyorsa SearchRAG tool'unu kullan
-
-⚠️ ÖNEMLİ FİYAT KURALI:
-- Eğer kullanıcı 'kampanya', 'indirim', 'kış' kelimesini kullanıyorsa:
-  → SADECE kampanya belgesindeki '→' işaretinden SONRAKI fiyatı söyle
-  → '960 TL' gibi indirimli fiyatı kullan
-- Normal fiyat sorarsa normal belgedeki fiyatı söyle";
+- Ürün bilgisi gerekiyorsa GetProductDetailsTool kullan
+- Fiyat aralığında arama için SearchProductsByPriceTool kullan
+- Kategori listesi için GetCategoryListTool kullan
+- Döküman araması için SearchRAGTool kullan
+- Fiyat hesaplama için CalculateTotalPriceTool kullan";
 
             if (!string.IsNullOrEmpty(ragContext))
             {
@@ -302,14 +320,117 @@ KURALLAR:
 
         public async Task<List<ChatMessage>> GetSessionHistoryAsync(string sessionId)
         {
-            _logger.LogInformation("[HISTORY] Session geçmişi istendi: {SessionId}", sessionId);
+            _logger.LogInformation("[HISTORY] Session geçmişi istendi:  {SessionId}", sessionId);
             return await _memoryRepository.GetHistoryAsync(sessionId);
+        }
+
+        /// <summary>
+        /// Tool'u çalıştırır ve sonucu döndürür (Manuel dispatch)
+        /// </summary>
+        private async Task<string> ExecuteToolAsync(FunctionCallContent toolCall)
+        {
+            _logger.LogInformation(
+                "[TOOL-EXEC] ⚙️ Executing: {ToolName}",
+                toolCall.Name
+            );
+
+            try
+            {
+                // Tool adına göre switch-case ile direkt çağır
+                string result = toolCall.Name switch
+                {
+                    "SearchRAGTool" => await ExecuteSearchRAGTool(toolCall.Arguments),
+                    "GetProductDetailsTool" => await ExecuteGetProductDetailsTool(toolCall.Arguments),
+                    "SearchProductsByPriceTool" => await ExecuteSearchProductsByPriceTool(toolCall.Arguments),
+                    "GetCategoryListTool" => await ExecuteGetCategoryListTool(toolCall.Arguments),
+                    "CalculateTotalPriceTool" => await ExecuteCalculateTotalPriceTool(toolCall.Arguments),
+                    _ => $"❌ Bilinmeyen tool: {toolCall.Name}"
+                };
+
+                _logger.LogInformation(
+                    "[TOOL-EXEC] ✅ {ToolName} başarılı",
+                    toolCall.Name
+                );
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(
+                    ex,
+                    "[TOOL-EXEC] ❌ {ToolName} execution error",
+                    toolCall.Name
+                );
+
+                return $"❌ Tool hatası: {ex.Message}";
+            }
         }
 
         public async Task ClearSessionAsync(string sessionId)
         {
             _logger.LogInformation("[CLEAR] Session temizleniyor: {SessionId}", sessionId);
             await _memoryRepository.ClearSessionAsync(sessionId);
+        }
+
+        // Helper metodlar (önceki mesajımdan)
+        private async Task<string> ExecuteSearchRAGTool(IDictionary<string, object?> args)
+        {
+            var query = args.ContainsKey("query") ? args["query"]?.ToString() ?? "" : "";
+            var topK = args.ContainsKey("topK") ? Convert.ToInt32(args["topK"]) : 3;
+
+            var results = await _rag.SemanticSearchAsync(query, topK);
+
+            if (!results.Any())
+                return "❌ İlgili bilgi bulunamadı.";
+
+            var response = "✅ Bulunan Bilgiler:\n\n";
+            int index = 1;
+            foreach (var doc in results)
+            {
+                var preview = doc.Content.Length > 100
+                    ? doc.Content.Substring(0, 100) + "..."
+                    : doc.Content;
+                response += $"{index}.  📄 **{doc.Title}**\n   {preview}\n\n";
+                index++;
+            }
+            return response;
+        }
+
+        private Task<string> ExecuteGetProductDetailsTool(IDictionary<string, object?> args)
+        {
+            // TODO: Implement
+            return Task.FromResult("GetProductDetailsTool executed");
+        }
+
+        private Task<string> ExecuteSearchProductsByPriceTool(IDictionary<string, object?> args)
+        {
+            // TODO:  Implement
+            return Task.FromResult("SearchProductsByPriceTool executed");
+        }
+
+        private Task<string> ExecuteGetCategoryListTool(IDictionary<string, object?> args)
+        {
+            // TODO: Implement
+            return Task.FromResult("GetCategoryListTool executed");
+        }
+
+        private Task<string> ExecuteCalculateTotalPriceTool(IDictionary<string, object?> args)
+        {
+            var pricesJson = args.ContainsKey("pricesJson") ? args["pricesJson"]?.ToString() ?? "[]" : "[]";
+
+            try
+            {
+                var prices = System.Text.Json.JsonSerializer.Deserialize<List<decimal>>(pricesJson);
+                if (prices == null || !prices.Any())
+                    return Task.FromResult("❌ Geçerli fiyat listesi girilmedi.");
+
+                var total = prices.Sum();
+                return Task.FromResult($"🧮 Toplam:  {total:N2} TL ({prices.Count} ürün)");
+            }
+            catch
+            {
+                return Task.FromResult("❌ JSON parse hatası");
+            }
         }
     }
 }
