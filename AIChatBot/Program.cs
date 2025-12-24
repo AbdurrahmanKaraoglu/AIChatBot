@@ -88,132 +88,39 @@ try
     builder.Services.AddScoped<RagService>();
     builder.Services.AddScoped<ChatService>();
     builder.Services.AddScoped<EmbeddingMigrationService>();
+    builder.Services.AddScoped<ToolFactory>(); // ✅ YENİ:  Factory ekle
+
 
     Log.Debug("[INIT] Repository ve servisler kaydedildi");
 
     // =============================================
-    // 4. AITool'ları Dictionary ile Kaydet
+    // 4. AITool'ları Dictionary ile Kaydet - FACTORY PATTERN
     // =============================================
 
-    // ✅ Dictionary oluştur
+    // ✅ Dictionary oluştur (boş)
     var toolsDictionary = new Dictionary<string, AITool>();
 
     builder.Services.AddSingleton<Dictionary<string, AITool>>(sp =>
     {
-        try
-        {
-            var logger = sp.GetRequiredService<ILoggerFactory>();
-            var knowledgeBaseRepo = sp.GetRequiredService<IKnowledgeBaseRepository>();
-            var ragService = sp.GetRequiredService<RagService>();
+        var dict = new Dictionary<string, AITool>();
 
-            // 🔧 1. SearchRAGTool
-            var searchRAGTool = new SearchRAGTool(
-                ragService,
-                logger.CreateLogger<SearchRAGTool>()
-            );
-            var searchRAGAITool = AIFunctionFactory.Create(
-                searchRAGTool.Execute,
-                name: "SearchRAGTool",
-                description: "Bilgi bankasında semantic search yapar.  Genel bilgi sorguları için kullanılır."
-            );
-            toolsDictionary.Add("SearchRAGTool", searchRAGAITool);
-            Log.Information("[INIT] ✅ SearchRAGTool kaydedildi");
+        // Tool'ları buraya eklemeyin - runtime'da eklenecek
+        Log.Information("[INIT] Tool dictionary hazırlandı (factory pattern)");
 
-            // 🔧 2. GetProductDetailsTool
-            var getProductDetailsTool = new GetProductDetailsTool(
-                knowledgeBaseRepo,
-                logger.CreateLogger<GetProductDetailsTool>()
-            );
-            var getProductDetailsAITool = AIFunctionFactory.Create(
-                getProductDetailsTool.Execute,
-                name: "GetProductDetailsTool",
-                description: "Belirli bir ürünün detaylı bilgisini getirir (ID veya isme göre)"
-            );
-            toolsDictionary.Add("GetProductDetailsTool", getProductDetailsAITool);
-            Log.Information("[INIT] ✅ GetProductDetailsTool kaydedildi");
-
-            // 🔧 3. SearchProductsByPriceTool
-            var searchProductsByPriceTool = new SearchProductsByPriceTool(
-                knowledgeBaseRepo,
-                logger.CreateLogger<SearchProductsByPriceTool>()
-            );
-            var searchProductsByPriceAITool = AIFunctionFactory.Create(
-                searchProductsByPriceTool.Execute,
-                name: "SearchProductsByPriceTool",
-                description: "Fiyat aralığına ve kategoriye göre ürün arar"
-            );
-            toolsDictionary.Add("SearchProductsByPriceTool", searchProductsByPriceAITool);
-            Log.Information("[INIT] ✅ SearchProductsByPriceTool kaydedildi");
-
-            // 🔧 4. GetCategoryListTool
-            var getCategoryListTool = new GetCategoryListTool(
-                knowledgeBaseRepo,
-                logger.CreateLogger<GetCategoryListTool>()
-            );
-            var getCategoryListAITool = AIFunctionFactory.Create(
-                getCategoryListTool.Execute,
-                name: "GetCategoryListTool",
-                description: "Sistemdeki tüm ürün kategorilerini listeler"
-            );
-            toolsDictionary.Add("GetCategoryListTool", getCategoryListAITool);
-            Log.Information("[INIT] ✅ GetCategoryListTool kaydedildi");
-
-            // 🔧 5. CalculateTotalPriceTool
-            var calculateTotalPriceTool = new CalculateTotalPriceTool(
-                logger.CreateLogger<CalculateTotalPriceTool>()
-            );
-            var calculateTotalPriceAITool = AIFunctionFactory.Create(
-                calculateTotalPriceTool.Execute,
-                name: "CalculateTotalPriceTool",
-                description: "Ürün fiyatlarının toplamını hesaplar"
-            );
-            toolsDictionary.Add("CalculateTotalPriceTool", calculateTotalPriceAITool);
-            Log.Information("[INIT] ✅ CalculateTotalPriceTool kaydedildi");
-
-            // 🔧 6. GetReturnPolicyTool
-            var getReturnPolicyTool = new GetReturnPolicyTool(
-                sp.GetRequiredService<IConfiguration>(),
-                logger.CreateLogger<GetReturnPolicyTool>()
-            );
-            var getReturnPolicyAITool = AIFunctionFactory.Create(
-                getReturnPolicyTool.Execute,
-                name: "GetReturnPolicyTool",
-                description: "İade politikası bilgilerini getirir"
-            );
-            toolsDictionary.Add("GetReturnPolicyTool", getReturnPolicyAITool);
-            Log.Information("[INIT] ✅ GetReturnPolicyTool kaydedildi");
-
-            // 🔧 7. GetPaymentMethodsTool
-            var getPaymentMethodsTool = new GetPaymentMethodsTool(
-                sp.GetRequiredService<IConfiguration>(),
-                logger.CreateLogger<GetPaymentMethodsTool>()
-            );
-            var getPaymentMethodsAITool = AIFunctionFactory.Create(
-                getPaymentMethodsTool.Execute,
-                name: "GetPaymentMethodsTool",
-                description: "Mevcut ödeme yöntemlerini listeler"
-            );
-            toolsDictionary.Add("GetPaymentMethodsTool", getPaymentMethodsAITool);
-            Log.Information("[INIT] ✅ GetPaymentMethodsTool kaydedildi");
-
-            Log.Information("========================================");
-            Log.Information("[INIT] 🛠️ Toplam {Count} tool kaydedildi", toolsDictionary.Count);
-            Log.Information("========================================");
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "[INIT] ❌ Tool kayıt hatası");
-        }
-
-        return toolsDictionary;
+        return dict;
     });
 
-    // ✅ IEnumerable<AITool> olarak da kaydet (ChatOptions için)
-    builder.Services.AddSingleton<IEnumerable<AITool>>(sp =>
+    // ✅ Tool Factory Servisi Kaydet
+    builder.Services.AddScoped<ToolFactory>();
+
+    // ✅ IEnumerable<AITool> - Runtime'da oluşturulacak
+    builder.Services.AddScoped<IEnumerable<AITool>>(sp =>
     {
-        var dict = sp.GetRequiredService<Dictionary<string, AITool>>();
-        return dict.Values;
+        var factory = sp.GetRequiredService<ToolFactory>();
+        return factory.CreateTools();
     });
+
+    Log.Debug("[INIT] Tool factory kaydedildi");
 
     // =============================================
     // 5. Health Checks Kaydı

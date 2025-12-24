@@ -9,23 +9,20 @@ namespace AIChatBot.Services
         private readonly IChatClient _chatClient;
         private readonly IChatMemoryRepository _memoryRepository;
         private readonly RagService _rag;
-        private readonly IEnumerable<AITool> _tools;
-        private readonly Dictionary<string, AITool> _toolsDictionary;
+        private readonly IEnumerable<AITool> _tools; // ✅ Bu kalacak
         private readonly ILogger<ChatService> _logger;
 
         public ChatService(
             IChatClient chatClient,
             IChatMemoryRepository memoryRepository,
             RagService rag,
-            IEnumerable<AITool> tools,
-            Dictionary<string, AITool> toolsDictionary,
+            IEnumerable<AITool> tools, // ✅ Scoped olarak gelecek
             ILogger<ChatService> logger)
         {
             _chatClient = chatClient;
             _memoryRepository = memoryRepository;
             _rag = rag;
             _tools = tools;
-            _toolsDictionary = toolsDictionary;
             _logger = logger;
         }
 
