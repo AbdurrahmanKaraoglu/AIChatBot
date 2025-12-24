@@ -215,20 +215,30 @@ Kurallar:
         {
             try
             {
-                // ChatResponse içindeki mesajı kontrol et
                 if (response == null)
                     return null;
 
-                // Yöntem 1: Message property'si varsa
+                // ✅ Yöntem 1: ToString() (Ollama için çalışıyor)
+                var responseText = response.ToString();
+                if (!string.IsNullOrWhiteSpace(responseText))
+                {
+                    _logger.LogDebug("[EXTRACT-TEXT] ToString() başarılı: {Length} karakter", responseText.Length);
+                    return responseText;
+                }
+
+                // ✅ Yöntem 2: Reflection ile Message.Text (fallback)
                 var message = response.GetType().GetProperty("Message")?.GetValue(response);
                 if (message != null)
                 {
                     var text = message.GetType().GetProperty("Text")?.GetValue(message) as string;
                     if (!string.IsNullOrEmpty(text))
+                    {
+                        _logger.LogDebug("[EXTRACT-TEXT] Message.Text başarılı");
                         return text;
+                    }
                 }
 
-                // Yöntem 2: Choices array'i varsa (bazı modellerde)
+                // ✅ Yöntem 3: Choices array (bazı modellerde)
                 var choices = response.GetType().GetProperty("Choices")?.GetValue(response);
                 if (choices != null && choices is System.Collections.IEnumerable enumerable)
                 {
@@ -239,14 +249,16 @@ Kurallar:
                         {
                             var text = choiceMessage.GetType().GetProperty("Text")?.GetValue(choiceMessage) as string;
                             if (!string.IsNullOrEmpty(text))
+                            {
+                                _logger.LogDebug("[EXTRACT-TEXT] Choices[]. Message.Text başarılı");
                                 return text;
+                            }
                         }
                     }
                 }
 
-                // Yöntem 3: ToString() fallback
-                _logger.LogWarning("[EXTRACT-TEXT] ChatResponse formatı bilinmiyor, ToString() kullanılıyor");
-                return response.ToString();
+                _logger.LogWarning("[EXTRACT-TEXT] Hiçbir yöntem çalışmadı");
+                return null;
             }
             catch (Exception ex)
             {
@@ -310,6 +322,7 @@ Kurallar:
             }
 
             // 3. KARGO ÜCRETİ HESAPLAMA
+            // 3.  KARGO ÜCRETİ HESAPLAMA
             if ((lower.Contains("kargo") || lower.Contains("teslimat") || lower.Contains("gönderim")) &&
                 (lower.Contains("ücret") || lower.Contains("fiyat") || lower.Contains("kaç") ||
                  lower.Contains("ne kadar")))
@@ -318,8 +331,8 @@ Kurallar:
 
                 try
                 {
-                    // Mesajdan fiyat çıkar
-                    var match = Regex.Match(userMessage, @"(\d+(?:[.,]\d+)?)\s*(? :TL|tl|lira)?");
+                    // ✅ Regex düzeltildi (boşluklar kaldırıldı)
+                    var match = Regex.Match(userMessage, @"(\d+(?:[.,]\d+)?)\s*(?:TL|tl|lira)?");
 
                     var tool = new CalculateShippingTool(
                         _configuration,
